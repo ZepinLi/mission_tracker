@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mission Tracker</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <p class="eyebrow">Mission Tracker</p>
+          <h1>Daily Operating System</h1>
+        </div>
+        <div class="top-actions" aria-label="Tracker controls">
+          <button class="icon-button" id="previousDay" type="button" aria-label="Previous day">&lt;</button>
+          <input id="datePicker" class="date-input" type="date" aria-label="Selected date">
+          <button class="icon-button" id="nextDay" type="button" aria-label="Next day">&gt;</button>
+          <button class="text-button" id="todayButton" type="button">Today</button>
+          <button class="text-button" id="exportButton" type="button">Export</button>
+          <label class="text-button file-button">
+            Import
+            <input id="importInput" type="file" accept="application/json">
+          </label>
+        </div>
+      </header>
+
+      <main class="main-grid">
+        <section class="mission-panel">
+          <div class="section-title">
+            <p class="eyebrow">North Star</p>
+            <h2>Mission Core</h2>
+          </div>
+          <label class="field-label" for="missionInput">Mission</label>
+          <textarea id="missionInput" class="mission-input" rows="3"></textarea>
+          <div id="identityGrid" class="identity-grid"></div>
+        </section>
+
+        <section class="score-panel" aria-label="Score summary">
+          <div class="metric-card primary">
+            <div id="todayRing" class="score-ring" style="--score: 0deg">
+              <span id="todayScore">0%</span>
+            </div>
+            <div>
+              <p class="eyebrow">Today</p>
+              <h2>Alignment</h2>
+            </div>
+          </div>
+          <div class="metric-row">
+            <div class="metric-card">
+              <p class="metric-value" id="weekScore">0%</p>
+              <p class="metric-label">7-day avg</p>
+            </div>
+            <div class="metric-card">
+              <p class="metric-value" id="streakCount">0</p>
+              <p class="metric-label">day streak</p>
+            </div>
+          </div>
+          <div id="balanceBars" class="balance-bars"></div>
+        </section>
+
+        <section class="action-panel">
+          <div class="section-title horizontal">
+            <div>
+              <p class="eyebrow">Execution</p>
+              <h2>Daily Actions</h2>
+            </div>
+            <div id="selectedDateLabel" class="date-pill"></div>
+          </div>
+          <div id="actionBoard" class="action-board"></div>
+        </section>
+
+        <section class="reflection-panel">
+          <div class="section-title">
+            <p class="eyebrow">Feedback</p>
+            <h2>Reflection</h2>
+          </div>
+          <div class="reflection-grid">
+            <label class="stacked-field">
+              <span>One thing</span>
+              <input id="oneThingInput" type="text" autocomplete="off">
+            </label>
+            <label class="stacked-field">
+              <span>Avoid today</span>
+              <input id="avoidInput" type="text" autocomplete="off">
+            </label>
+            <label class="stacked-field">
+              <span>Win</span>
+              <textarea id="winInput" rows="3"></textarea>
+            </label>
+            <label class="stacked-field">
+              <span>Lesson</span>
+              <textarea id="lessonInput" rows="3"></textarea>
+            </label>
+          </div>
+        </section>
+
+        <section class="principle-panel">
+          <div class="section-title">
+            <p class="eyebrow">Iteration</p>
+            <h2>Principles Lab</h2>
+          </div>
+          <div class="principle-form">
+            <label class="stacked-field">
+              <span>Pattern</span>
+              <textarea id="patternInput" rows="3"></textarea>
+            </label>
+            <label class="stacked-field">
+              <span>Principle</span>
+              <textarea id="principleInput" rows="3"></textarea>
+            </label>
+            <label class="stacked-field">
+              <span>Mechanism</span>
+              <textarea id="mechanismInput" rows="3"></textarea>
+            </label>
+          </div>
+          <div id="principleList" class="principle-list"></div>
+        </section>
+
+        <section class="weekly-panel">
+          <div class="section-title horizontal">
+            <div>
+              <p class="eyebrow">Review</p>
+              <h2>7-Day Map</h2>
+            </div>
+            <button class="text-button subtle" id="clearDayButton" type="button">Clear day</button>
+          </div>
+          <div id="heatmap" class="heatmap"></div>
+        </section>
+      </main>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>
