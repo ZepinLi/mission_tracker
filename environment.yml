@@ -1,0 +1,3 @@
+name: mission-tracker
+dependencies:
+  - nodejs=22

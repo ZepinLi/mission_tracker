@@ -1,0 +1,10 @@
+.DS_Store
+node_modules/
+.env
+.env.*
+!.env.example
+Miniforge3-MacOSX-*.sh
+config.public.js
+public/config.public.js
+data/*.json
+data/weeks/*.json

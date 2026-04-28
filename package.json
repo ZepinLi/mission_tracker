@@ -1,0 +1,9 @@
+{
+  "name": "mission-tracker",
+  "version": "0.2.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "build": "node scripts/build-public.js"
+  }
+}
