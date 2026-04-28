@@ -8,3 +8,4 @@ config.public.js
 public/config.public.js
 data/*.json
 data/weeks/*.json
+vercel/
