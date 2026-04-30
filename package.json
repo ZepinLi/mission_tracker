@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "start": "node server.js",
-    "build": "node scripts/build-public.js"
+    "build": "node scripts/build-public.js",
+    "test": "node --test"
   }
 }

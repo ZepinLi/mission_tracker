@@ -1,4 +1,14 @@
 {
   "buildCommand": "node scripts/build-public.js",
-  "outputDirectory": "public"
+  "outputDirectory": "public",
+  "rewrites": [
+    {
+      "source": "/p/(.*)",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/join/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }

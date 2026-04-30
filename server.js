@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 
-const HOST = process.env.HOST || "0.0.0.0";
+const HOST = process.env.HOST || "127.0.0.1";
 const PORT = Number(process.env.PORT || 4173);
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, "data");
@@ -232,9 +232,29 @@ function handleStatic(req, res) {
   const url = new URL(req.url, "http://localhost:" + PORT);
   const pathname = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
   const filePath = path.normalize(path.join(ROOT, pathname));
+  const isSpaRoute = !path.extname(pathname) && (pathname.startsWith("/p/") || pathname.startsWith("/join/"));
 
   if (!filePath.startsWith(ROOT) || filePath.includes(path.sep + ".git" + path.sep)) {
     send(res, 403, "Forbidden", { "Content-Type": "text/plain; charset=utf-8" });
+    return;
+  }
+
+  if (isSpaRoute) {
+    send(res, 200, fs.readFileSync(path.join(ROOT, "index.html")), {
+      "Content-Type": MIME_TYPES[".html"],
+    });
+    return;
+  }
+
+  if (pathname === "/config.public.js" && !fs.existsSync(filePath)) {
+    send(
+      res,
+      200,
+      'window.MISSION_TRACKER_CONFIG = window.MISSION_TRACKER_CONFIG || { supabaseUrl: "", supabaseAnonKey: "" };\n',
+      {
+        "Content-Type": MIME_TYPES[".js"],
+      }
+    );
     return;
   }
 
@@ -273,6 +293,7 @@ server.listen(PORT, HOST, () => {
   for (const url of localAccessUrls()) {
     console.log("  " + url);
   }
+  console.log("Default host is loopback for safety. Set HOST=0.0.0.0 only on trusted networks.");
   console.log("Weekly data directory: " + WEEKS_DIR);
   console.log("Core data file: " + CORE_FILE);
 });

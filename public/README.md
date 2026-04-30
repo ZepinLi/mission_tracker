@@ -1,5 +1,170 @@
 # Mission Tracker
 
+Mission Tracker is a collaborative daily operating system for mission, identity votes, daily actions, reflection, principle capture, and inline discussion.
+
+The current product direction is no longer "one user's local tracker blob". It now supports:
+
+- multiple accounts
+- multiple pages per account
+- shared pages with role-based access
+- share links and email invites
+- inline comment threads on concrete fields
+- conflict-safe sync across devices
+
+## Run locally
+
+Start the local static/file server:
+
+```bash
+node server.js
+```
+
+Then open:
+
+- `http://127.0.0.1:4173`
+
+The local server now defaults to loopback for safety. Set `HOST=0.0.0.0` only on a trusted network.
+
+## What runs where
+
+### Local server
+
+`server.js` is now a private local helper. It still serves static files and the legacy local JSON API, but it is **not** the public collaboration backend.
+
+### Public production path
+
+Public deployment should be:
+
+1. static frontend
+2. Supabase Auth
+3. Supabase Postgres + RLS
+4. Supabase Realtime
+
+The collaborative app depends on Supabase for:
+
+- page ownership
+- memberships and invites
+- share-link redemption
+- week persistence
+- comments
+- conflict-safe sync
+
+## Architecture
+
+Read the detailed pipeline and layering notes here:
+
+- [`docs/collaboration-pipeline.md`](./docs/collaboration-pipeline.md)
+- [`docs/foundation-bu-er-guo.md`](./docs/foundation-bu-er-guo.md)
+
+High-level layers:
+
+- `src/state`: schemas, normalization, scoring, compaction, merge
+- `src/storage`: Supabase repository and local draft cache
+- `src/ui`: pure render functions and DOM map
+- `src/controller.js`: orchestration for auth, routing, sync, sharing, comments
+
+`public/` is generated output. Source of truth lives in:
+
+- `app.js`
+- `index.html`
+- `styles.css`
+- `src/**`
+
+## Data model
+
+### Legacy personal storage
+
+These tables still exist so older single-user data can be migrated into the new page model:
+
+- `mission_tracker_profiles`
+- `mission_tracker_weeks`
+
+### Collaborative storage
+
+The new collaboration model centers on pages:
+
+- `mission_tracker_pages`
+- `mission_tracker_page_members`
+- `mission_tracker_page_invites`
+- `mission_tracker_share_links`
+- `mission_tracker_page_weeks`
+- `mission_tracker_comment_threads`
+- `mission_tracker_comments`
+
+Daily tracker content is still stored by ISO week, but now under `page_id` instead of `user_id`.
+
+## Inline comments
+
+Comments are anchored to specific fields. Examples:
+
+- `core:mission`
+- `entry:2026-04-30:reflection:lesson`
+- `entry:2026-04-30:principle:pattern`
+- `entry:2026-04-30:action:rl_deep_work`
+
+This allows a shared page to behave more like a collaborative document than a plain form.
+
+## Conflict handling
+
+The app keeps a local draft and a last-synced base snapshot. Saves use revision checks on the page row and week rows.
+
+If another device changed the same page:
+
+1. the app reloads the latest remote bundle
+2. runs a three-way merge
+3. auto-merges safe changes
+4. asks the user to choose when the same field changed on both sides
+
+This is the minimum acceptable behavior for cross-device editing. Silent overwrite would be a design failure.
+
+## Build for static hosting
+
+```bash
+npm run build
+```
+
+This copies source files into `public/`, including the module tree under `src/`.
+
+## Vercel + Supabase setup
+
+1. Create a Supabase project.
+2. Run `supabase/schema.sql` in the Supabase SQL editor.
+3. In Supabase Auth, set the site URL and redirect URLs for your deployed frontend.
+4. In Vercel project environment variables, set:
+
+```text
+SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+```
+
+5. Deploy with:
+
+- build command: `node scripts/build-public.js`
+- output directory: `public`
+
+The included `vercel.json` rewrites `/p/*` and `/join/*` back to `index.html` so deep-linked collaborative routes work.
+
+## Config
+
+Use `config.public.example.js` as the template for local static testing:
+
+```js
+window.MISSION_TRACKER_CONFIG = {
+  supabaseUrl: "https://YOUR_PROJECT_REF.supabase.co",
+  supabaseAnonKey: "YOUR_SUPABASE_ANON_KEY",
+};
+```
+
+## Security notes
+
+- Do not expose a Supabase service role key in frontend code.
+- Keep RLS enabled and audited.
+- Treat `server.js` as local-only infrastructure.
+- Share links are stored as token hashes and redeemed after login.
+
+If you expose the local JSON write API to the public internet, you are bypassing the actual security model and inviting data corruption.
+# Mission Tracker
+
 A local, dependency-free tracker for mission, identity votes, daily actions, and principle iteration.
 
 Run the local server and open the tracker in a browser:
