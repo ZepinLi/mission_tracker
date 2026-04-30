@@ -244,7 +244,7 @@ export class MissionTrackerController {
     this.dom.signUpButton.addEventListener("click", async () => {
       try {
         await this.repository.signUp(this.dom.authEmail.value.trim(), this.dom.authPassword.value);
-        this.setAuthMessage("Account created. Check your email if confirmation is enabled.", "success");
+        this.setAuthMessage("Account created. Loading your local pages...", "success");
       } catch (error) {
         this.setAuthMessage(error.message || "Unable to sign up.", "error");
       }
@@ -1144,10 +1144,10 @@ export class MissionTrackerController {
         ? "Sign in to collaborate"
         : "Local draft mode";
     this.dom.authCopy.textContent = this.user
-      ? "Your pages sync through Supabase with role-based access, share links, and comment threads."
+      ? "Your pages sync through this local server with role-based access, share links, and comment threads."
       : this.cloudEnabled
-        ? "Use Supabase Auth to open your own pages, join shared pages, and sync comments."
-        : "Configure Supabase in config.public.js to enable cloud pages, collaboration, comments, and realtime sync.";
+        ? "Use a local account to open your own pages, join shared pages, and sync comments."
+        : "Run the local Node server to enable pages, collaboration, comments, and realtime sync.";
     this.dom.signOutButton.hidden = !this.user;
     this.dom.authEmail.closest("label").hidden = Boolean(this.user);
     this.dom.authPassword.closest("label").hidden = Boolean(this.user);
@@ -1162,6 +1162,16 @@ export class MissionTrackerController {
     this.dom.noticeAcceptButton.textContent = this.notice?.cta?.label || "Continue";
 
     if (!this.currentPage) {
+      this.dom.newPageButton.disabled = !this.user;
+      this.dom.copyPageUrlButton.disabled = true;
+      this.dom.inviteEmailInput.disabled = true;
+      this.dom.inviteRoleSelect.disabled = true;
+      this.dom.inviteButton.disabled = true;
+      this.dom.shareRoleSelect.disabled = true;
+      this.dom.createShareLinkButton.disabled = true;
+      this.dom.newCommentBody.disabled = true;
+      this.dom.createThreadButton.disabled = true;
+      this.setEditability(false);
       this.dom.saveStatus.textContent = this.cloudEnabled
         ? "Sign in to load pages"
         : "Local draft only";

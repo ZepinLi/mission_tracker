@@ -30,7 +30,6 @@ for (const directory of directories) {
   copyDirectory(path.join(root, directory), path.join(out, directory));
 }
 
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
-const config = `window.MISSION_TRACKER_CONFIG = ${JSON.stringify({ supabaseUrl, supabaseAnonKey }, null, 2)};\n`;
+const apiBaseUrl = process.env.API_BASE_URL || "";
+const config = `window.MISSION_TRACKER_CONFIG = ${JSON.stringify({ apiBaseUrl }, null, 2)};\n`;
 fs.writeFileSync(path.join(out, "config.public.js"), config);

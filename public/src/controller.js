@@ -244,7 +244,7 @@ export class MissionTrackerController {
     this.dom.signUpButton.addEventListener("click", async () => {
       try {
         await this.repository.signUp(this.dom.authEmail.value.trim(), this.dom.authPassword.value);
-        this.setAuthMessage("Account created. Check your email if confirmation is enabled.", "success");
+        this.setAuthMessage("Account created. Loading your local pages...", "success");
       } catch (error) {
         this.setAuthMessage(error.message || "Unable to sign up.", "error");
       }
@@ -862,7 +862,9 @@ export class MissionTrackerController {
   }
 
   async createInvite() {
-    if (!canManage(this.currentRole) || !this.currentPage) return;
+    if (!this.cloudEnabled || !this.user || !this.profile || !canManage(this.currentRole) || !this.currentPage) {
+      return;
+    }
     const email = this.dom.inviteEmailInput.value.trim();
     if (!email) return;
     await this.repository.createInvite({
@@ -878,12 +880,14 @@ export class MissionTrackerController {
   }
 
   async revokeInvite(inviteId) {
+    if (!this.cloudEnabled || !this.user || !this.currentPage) return;
     await this.repository.revokeInvite(inviteId);
     this.invites = await this.repository.listPageInvites(this.currentPage.id);
     this.render();
   }
 
   async acceptInvite(inviteId) {
+    if (!this.cloudEnabled || !this.user) return;
     const acceptedPageId = await this.repository.acceptInvite(inviteId);
     this.pendingInvites = await this.repository.listPendingInvitesForUser(this.user);
     this.pages = await this.repository.listPages();
@@ -897,7 +901,9 @@ export class MissionTrackerController {
   }
 
   async createShareLink() {
-    if (!canManage(this.currentRole) || !this.currentPage) return;
+    if (!this.cloudEnabled || !this.user || !this.profile || !canManage(this.currentRole) || !this.currentPage) {
+      return;
+    }
     const { link, rawToken } = await this.repository.createShareLink({
       pageId: this.currentPage.id,
       pageTitle: this.currentPage.title,
@@ -917,27 +923,37 @@ export class MissionTrackerController {
   }
 
   async revokeShareLink(linkId) {
+    if (!this.cloudEnabled || !this.user || !this.currentPage) return;
     await this.repository.revokeShareLink(linkId);
     this.shareLinks = await this.repository.listShareLinks(this.currentPage.id);
     this.render();
   }
 
   async updateMemberRole(userId, role) {
-    if (!canManage(this.currentRole)) return;
+    if (!this.cloudEnabled || !this.user || !canManage(this.currentRole)) return;
     await this.repository.updateMemberRole(this.currentPage.id, userId, role);
     this.members = await this.repository.listPageMembers(this.currentPage.id);
     this.render();
   }
 
   async removeMember(userId) {
-    if (!canManage(this.currentRole)) return;
+    if (!this.cloudEnabled || !this.user || !canManage(this.currentRole)) return;
     await this.repository.removeMember(this.currentPage.id, userId);
     this.members = await this.repository.listPageMembers(this.currentPage.id);
     this.render();
   }
 
   async createThread() {
-    if (!this.currentPage || !this.selectedAnchor || !canComment(this.currentRole)) return;
+    if (
+      !this.cloudEnabled ||
+      !this.user ||
+      !this.profile ||
+      !this.currentPage ||
+      !this.selectedAnchor ||
+      !canComment(this.currentRole)
+    ) {
+      return;
+    }
     const body = this.dom.newCommentBody.value.trim();
     if (!body) return;
     await this.repository.createThread({
@@ -954,7 +970,7 @@ export class MissionTrackerController {
   }
 
   async replyToThread(threadId) {
-    if (!canComment(this.currentRole)) return;
+    if (!this.cloudEnabled || !this.user || !this.profile || !canComment(this.currentRole)) return;
     const input = document.querySelector(`[data-reply-input="${threadId}"]`);
     const body = input?.value.trim();
     if (!body) return;
@@ -971,7 +987,7 @@ export class MissionTrackerController {
   }
 
   async setThreadStatus(threadId, status) {
-    if (!canComment(this.currentRole)) return;
+    if (!this.cloudEnabled || !this.user || !this.profile || !canComment(this.currentRole)) return;
     await this.repository.setThreadStatus({
       threadId,
       status,
@@ -1116,7 +1132,7 @@ export class MissionTrackerController {
     this.dom.pageSelect.innerHTML = renderPageOptions(
       this.pages.map((page) => ({
         ...page,
-        role: page.ownerId === this.user?.id ? "owner" : "shared",
+        role: !this.cloudEnabled ? "owner" : page.ownerId === this.user?.id ? "owner" : "shared",
       })),
       this.currentPage?.id
     );
@@ -1128,15 +1144,17 @@ export class MissionTrackerController {
         ? "Sign in to collaborate"
         : "Local draft mode";
     this.dom.authCopy.textContent = this.user
-      ? "Your pages sync through Supabase with role-based access, share links, and comment threads."
+      ? "Your pages sync through this local server with role-based access, share links, and comment threads."
       : this.cloudEnabled
-        ? "Use Supabase Auth to open your own pages, join shared pages, and sync comments."
-        : "Configure Supabase in config.public.js to enable cloud pages, collaboration, comments, and realtime sync.";
+        ? "Use a local account to open your own pages, join shared pages, and sync comments."
+        : "Run the local Node server to enable pages, collaboration, comments, and realtime sync.";
     this.dom.signOutButton.hidden = !this.user;
     this.dom.authEmail.closest("label").hidden = Boolean(this.user);
     this.dom.authPassword.closest("label").hidden = Boolean(this.user);
-    this.dom.authForm.querySelector('[type="submit"]').hidden = Boolean(this.user);
-    this.dom.signUpButton.hidden = Boolean(this.user);
+    this.dom.authEmail.disabled = !this.cloudEnabled || Boolean(this.user);
+    this.dom.authPassword.disabled = !this.cloudEnabled || Boolean(this.user);
+    this.dom.authForm.querySelector('[type="submit"]').hidden = Boolean(this.user) || !this.cloudEnabled;
+    this.dom.signUpButton.hidden = Boolean(this.user) || !this.cloudEnabled;
 
     this.dom.noticePanel.hidden = !this.notice;
     this.dom.noticeText.textContent = this.notice?.message || "";
@@ -1144,6 +1162,16 @@ export class MissionTrackerController {
     this.dom.noticeAcceptButton.textContent = this.notice?.cta?.label || "Continue";
 
     if (!this.currentPage) {
+      this.dom.newPageButton.disabled = !this.user;
+      this.dom.copyPageUrlButton.disabled = true;
+      this.dom.inviteEmailInput.disabled = true;
+      this.dom.inviteRoleSelect.disabled = true;
+      this.dom.inviteButton.disabled = true;
+      this.dom.shareRoleSelect.disabled = true;
+      this.dom.createShareLinkButton.disabled = true;
+      this.dom.newCommentBody.disabled = true;
+      this.dom.createThreadButton.disabled = true;
+      this.setEditability(false);
       this.dom.saveStatus.textContent = this.cloudEnabled
         ? "Sign in to load pages"
         : "Local draft only";
@@ -1152,8 +1180,8 @@ export class MissionTrackerController {
 
     const dashboard = computeDashboardStats(this.draft.core, this.draft.entries, this.selectedDate);
     const canUserEdit = canEdit(this.currentRole);
-    const canUserManage = canManage(this.currentRole);
-    const canUserComment = canComment(this.currentRole);
+    const canUserManage = this.cloudEnabled && Boolean(this.user) && canManage(this.currentRole);
+    const canUserComment = this.cloudEnabled && Boolean(this.user) && canComment(this.currentRole);
 
     this.dom.datePicker.value = this.selectedDate;
     this.dom.pageTitleInput.value = this.draft.title || "";
@@ -1161,9 +1189,11 @@ export class MissionTrackerController {
     this.dom.pageSlugValue.textContent = `/p/${this.currentPage.slug}`;
     this.dom.pageRoleBadge.textContent = this.currentRole;
     this.dom.pageRoleBadge.className = `role-badge ${this.currentRole}`;
-    this.dom.pageMetaCopy.textContent = canUserEdit
-      ? "Editors can change tracker content. Commenters can discuss but not edit values."
-      : "You can view and comment based on your role.";
+    this.dom.pageMetaCopy.textContent = !this.cloudEnabled
+      ? "Local draft mode only. Configure Supabase to enable shared pages, invites, and synced comments."
+      : canUserEdit
+        ? "Editors can change tracker content. Commenters can discuss but not edit values."
+        : "You can view and comment based on your role.";
 
     this.dom.missionInput.value = this.draft.core.mission || "";
     ensureEntry(this.draft.entries, this.selectedDate);
@@ -1227,6 +1257,8 @@ export class MissionTrackerController {
     this.dom.inviteButton.disabled = !canUserManage;
     this.dom.shareRoleSelect.disabled = !canUserManage;
     this.dom.createShareLinkButton.disabled = !canUserManage;
+    this.dom.newPageButton.disabled = !this.cloudEnabled || !this.user;
+    this.dom.copyPageUrlButton.disabled = !this.cloudEnabled || !this.currentPage;
 
     this.dom.conflictBox.hidden = !this.conflicts.length;
     this.dom.conflictSummary.innerHTML = renderConflictSummary(this.conflicts);

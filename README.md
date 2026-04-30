@@ -1,5 +1,185 @@
 # Mission Tracker
 
+Mission Tracker is a local-first collaborative daily operating system for mission, identity votes, daily actions, reflection, principle capture, and inline discussion.
+
+The app now runs as a single local Node server:
+
+```text
+Browser SPA -> Node REST API + SSE -> SQLite
+```
+
+No Supabase account is required.
+
+## Run Locally
+
+```bash
+node server.js
+```
+
+Then open:
+
+```text
+http://127.0.0.1:4173
+```
+
+The server creates and uses:
+
+- `data/mission-tracker.sqlite`
+- `data/local-admin.txt` on the first run if no user exists
+
+Open `data/local-admin.txt` to get the generated first admin password, or set your own before first start:
+
+```bash
+LOCAL_ADMIN_EMAIL=you@example.com LOCAL_ADMIN_PASSWORD=change-me node server.js
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:LOCAL_ADMIN_EMAIL="you@example.com"
+$env:LOCAL_ADMIN_PASSWORD="change-me"
+node server.js
+```
+
+## Access From Other Devices
+
+By default the server binds to `127.0.0.1` for safety.
+
+For trusted LAN access:
+
+```bash
+HOST=0.0.0.0 node server.js
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:HOST="0.0.0.0"
+node server.js
+```
+
+Then open the LAN URL printed by the server, such as:
+
+```text
+http://192.168.x.x:4173
+```
+
+For private multi-device access across networks, prefer Tailscale or ZeroTier. Do not expose this directly to the public internet without HTTPS, rate limiting, backups, and stronger operational controls.
+
+## Architecture
+
+Runtime backend modules:
+
+- `server.js`: startup, static file serving, SPA route fallback
+- `server/api.js`: REST router
+- `server/db.js`: SQLite connection and schema initialization
+- `server/auth.js`: local users, password hashing, session cookies
+- `server/permissions.js`: page role checks
+- `server/realtime.js`: Server-Sent Events page notifications
+- `server/services/pages.js`: pages, weeks, members, invites, share links
+- `server/services/comments.js`: comment threads and replies
+
+Frontend modules:
+
+- `src/controller.js`: app orchestration
+- `src/state/*`: state schema, scoring, week grouping, three-way merge
+- `src/storage/repository-http.js`: local REST/SSE repository
+- `src/ui/*`: DOM handles and render functions
+
+The controller still talks to a repository interface. The storage implementation is now HTTP/SSE instead of browser-side Supabase.
+
+## Data Model
+
+SQLite tables:
+
+- `users`
+- `sessions`
+- `pages`
+- `page_members`
+- `page_invites`
+- `share_links`
+- `page_weeks`
+- `comment_threads`
+- `comments`
+
+Tracker entries are stored by page and ISO week in `page_weeks`.
+
+## Collaboration Model
+
+Roles:
+
+- `viewer`: read page, weeks, people, comments
+- `commenter`: viewer + create/reply/resolve comment threads
+- `editor`: commenter + edit page core and week entries
+- `owner`: editor + manage members, invites, and share links
+
+Sharing options:
+
+- direct email invite
+- share link with viewer/commenter/editor role
+
+Share-link tokens are stored hashed in SQLite. The raw link is shown only when created.
+
+## Conflict Handling
+
+Writes use revision checks:
+
+- page core updates require `expectedRevision`
+- week updates require `expectedRevision`
+- stale updates return `409 Conflict`
+
+The frontend keeps:
+
+- last remote base snapshot
+- local draft
+- fresh remote snapshot
+
+When a conflict occurs, it runs a three-way merge and asks the user to choose if the same field changed on both sides.
+
+## Inline Comments
+
+Comments attach to stable anchors, for example:
+
+- `core:mission`
+- `entry:2026-04-30:reflection:lesson`
+- `entry:2026-04-30:principle:mechanism`
+- `entry:2026-04-30:action:rl_deep_work`
+
+The right sidebar shows field-specific threads with replies and resolve/reopen controls.
+
+## Legacy Data
+
+The old local JSON files are no longer the collaboration source of truth:
+
+- `data/core.json`
+- `data/weeks/*.json`
+
+They are only used as a legacy import source when creating the first page for a user.
+
+## Build
+
+```bash
+npm run build
+```
+
+This copies frontend sources into `public/`.
+
+## Test
+
+```bash
+npm test
+```
+
+The test suite exercises the local SQLite backend: page save conflicts, comments, invites, and share-link membership.
+
+## Security Notes
+
+- Passwords are hashed with Node `crypto.scrypt`.
+- Sessions use `HttpOnly` cookies and server-side session rows.
+- `.gitignore` excludes the SQLite database and generated admin credential file.
+- Binding to LAN with `HOST=0.0.0.0` is for trusted networks only.
+# Mission Tracker
+
 Mission Tracker is a collaborative daily operating system for mission, identity votes, daily actions, reflection, principle capture, and inline discussion.
 
 The current product direction is no longer "one user's local tracker blob". It now supports:
