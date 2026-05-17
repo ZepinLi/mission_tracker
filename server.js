@@ -2,9 +2,12 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const { loadEnv } = require("./server/env");
 const { handleApi } = require("./server/api");
 const { DB_FILE, openDatabase } = require("./server/db");
 const { send } = require("./server/utils");
+
+loadEnv();
 
 const HOST = process.env.HOST || "127.0.0.1";
 const PORT = Number(process.env.PORT || 4173);

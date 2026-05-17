@@ -5,6 +5,12 @@
   "scripts": {
     "start": "node server.js",
     "build": "node scripts/build-public.js",
-    "test": "node --test"
+    "test": "node --test",
+    "local:start": "node scripts/local-start.js",
+    "local:stop": "node scripts/local-stop.js",
+    "local:open": "node scripts/local-open.js",
+    "local:restart": "node scripts/local-stop.js && node scripts/local-start.js",
+    "local:install-autostart": "node scripts/local-autostart.js install",
+    "local:uninstall-autostart": "node scripts/local-autostart.js uninstall"
   }
 }

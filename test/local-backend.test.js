@@ -1,5 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 
 const auth = require("../server/auth");
 const pages = require("../server/services/pages");
@@ -110,4 +111,187 @@ test("local backend supports invite and share-link membership", () => {
   const roles = new Map(members.map((member) => [member.email, member.role]));
   assert.equal(roles.get(memberResult.user.email), "editor");
   assert.equal(roles.get(linkResult.user.email), "commenter");
+});
+
+
+const personalTracker = require("../server/services/personal-tracker");
+
+test("personal tracker persists local daily loop", () => {
+  const previousState = fs.existsSync(personalTracker.STATE_FILE)
+    ? fs.readFileSync(personalTracker.STATE_FILE, "utf8")
+    : null;
+
+  try {
+  const firstDate = "2099-01-05";
+  const secondDate = "2099-01-06";
+  const loaded = personalTracker.loadTracker();
+
+  assert.ok(loaded.core);
+  assert.ok(loaded.entries);
+
+  const saved = personalTracker.saveTracker({
+    ...loaded,
+    entries: {
+      ...loaded.entries,
+      [firstDate]: {
+        principle: {
+          pattern: "Missed the research block.",
+          rootCondition: "No protected calendar slot.",
+          principle: "Important work needs a visible appointment.",
+          mechanism: "Block tomorrow's first 90 minutes before sleep.",
+        },
+        keyActions: {
+          venture: "Message one founder.",
+          research: "Write one experiment note.",
+          family: "Evening walk.",
+        },
+      },
+    },
+  });
+
+  assert.equal(saved.entries[firstDate].principle.rootCondition, "No protected calendar slot.");
+  assert.equal(personalTracker.loadTracker().entries[firstDate].keyActions.family, "Evening walk.");
+
+  const beforeSecondSave = personalTracker.loadTracker();
+  personalTracker.saveTracker({
+    ...beforeSecondSave,
+    entries: {
+      ...beforeSecondSave.entries,
+      [secondDate]: {
+        principle: {
+          pattern: "Context switched too early.",
+          rootCondition: "Inbox was open.",
+          principle: "Start deep work with closed loops.",
+          mechanism: "Close email before opening code.",
+        },
+      },
+    },
+  });
+
+  const reloaded = personalTracker.loadTracker();
+  assert.equal(reloaded.entries[firstDate].principle.pattern, "Missed the research block.");
+  assert.equal(reloaded.entries[secondDate].principle.mechanism, "Close email before opening code.");
+  } finally {
+    if (previousState == null) {
+      fs.rmSync(personalTracker.STATE_FILE, { force: true });
+    } else {
+      fs.writeFileSync(personalTracker.STATE_FILE, previousState);
+    }
+  }
+});
+
+
+const aiDynamics = require("../server/services/ai-dynamics");
+
+test("AI dynamics config reports missing API key", async () => {
+  const previousKey = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+
+  try {
+    assert.equal(aiDynamics.config().hasApiKey, false);
+    await assert.rejects(
+      () => aiDynamics.analyze({ date: "2099-01-07", entry: {}, model: "gpt-5.2" }),
+      /Missing OPENAI_API_KEY/
+    );
+  } finally {
+    if (previousKey == null) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
+});
+
+test("AI dynamics prompt payload excludes API key", () => {
+  const previousKey = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "test-secret-key";
+
+  try {
+    const payload = aiDynamics.analysisInput({
+      date: "2099-01-07",
+      entry: {
+        principle: {
+          pattern: "Repeated context switching.",
+          rootCondition: "Notifications stayed on.",
+          principle: "Deep work starts by removing live inputs.",
+          mechanism: "Turn on focus mode before opening papers.",
+        },
+        keyActions: {
+          venture: "Talk to one user.",
+          research: "Write one result note.",
+          family: "Phone away dinner.",
+        },
+      },
+      recentEntries: {},
+      core: { mission: "Test mission" },
+    });
+
+    assert.match(JSON.stringify(payload), /Repeated context switching/);
+    assert.doesNotMatch(JSON.stringify(payload), /test-secret-key/);
+  } finally {
+    if (previousKey == null) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
+});
+
+test("personal tracker preserves saved AI analyses", () => {
+  const previousState = fs.existsSync(personalTracker.STATE_FILE)
+    ? fs.readFileSync(personalTracker.STATE_FILE, "utf8")
+    : null;
+
+  try {
+    const date = "2099-01-08";
+    const saved = personalTracker.saveTracker({
+      entries: {
+        [date]: {
+          principle: {
+            pattern: "Skipped planning.",
+            rootCondition: "Started day in inbox.",
+            principle: "Planning must precede inputs.",
+            mechanism: "Open tracker before browser.",
+          },
+          aiAnalyses: [
+            {
+              id: "analysis-1",
+              createdAt: "2099-01-08T00:00:00.000Z",
+              model: "gpt-5.2",
+              promptType: "dynamics-analysis",
+              inputSummary: { signalMistake: "Skipped planning." },
+              analysisText: "State: planning lost to input pressure.",
+              messages: [{ role: "assistant", content: "State: planning lost to input pressure." }],
+            },
+          ],
+        },
+      },
+    });
+
+    assert.equal(saved.entries[date].aiAnalyses[0].id, "analysis-1");
+    assert.equal(personalTracker.loadTracker().entries[date].aiAnalyses[0].model, "gpt-5.2");
+  } finally {
+    if (previousState == null) {
+      fs.rmSync(personalTracker.STATE_FILE, { force: true });
+    } else {
+      fs.writeFileSync(personalTracker.STATE_FILE, previousState);
+    }
+  }
+});
+
+
+test("AI dynamics sanitizes reasoning effort", () => {
+  assert.equal(aiDynamics.sanitizeReasoningEffort("high"), "high");
+  assert.equal(aiDynamics.sanitizeReasoningEffort("medium"), "medium");
+  assert.equal(aiDynamics.sanitizeReasoningEffort("instant"), "high");
+});
+
+
+test("AI dynamics parses SSE response output", () => {
+  const text = [
+    'event: response.output_text.delta',
+    'data: {"type":"response.output_text.delta","delta":"o"}',
+    '',
+    'event: response.output_text.delta',
+    'data: {"type":"response.output_text.delta","delta":"k"}',
+    '',
+    'event: response.output_text.done',
+    'data: {"type":"response.output_text.done","text":"ok"}',
+    '',
+  ].join("\n");
+  assert.equal(aiDynamics.parseSseResponse(text), "ok");
 });

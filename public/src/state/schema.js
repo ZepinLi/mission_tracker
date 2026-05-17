@@ -102,9 +102,11 @@ export function createEmptyEntry() {
     },
     principle: {
       pattern: "",
+      rootCondition: "",
       principle: "",
       mechanism: "",
     },
+    aiAnalyses: [],
   };
 }
 
@@ -158,9 +160,11 @@ export function normalizeEntry(savedEntry) {
     },
     principle: {
       pattern: String(savedEntry.principle?.pattern || ""),
+      rootCondition: String(savedEntry.principle?.rootCondition || ""),
       principle: String(savedEntry.principle?.principle || ""),
       mechanism: String(savedEntry.principle?.mechanism || ""),
     },
+    aiAnalyses: Array.isArray(savedEntry.aiAnalyses) ? savedEntry.aiAnalyses : [],
   };
 }
 

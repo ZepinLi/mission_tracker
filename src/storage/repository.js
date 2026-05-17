@@ -1,5 +1,5 @@
-import { createHttpRepository } from "./repository-http.js";
+import { createPersonalRepository } from "./personal-repository.js";
 
 export function createRepository(publicConfig = {}) {
-  return createHttpRepository(publicConfig);
+  return createPersonalRepository(publicConfig);
 }

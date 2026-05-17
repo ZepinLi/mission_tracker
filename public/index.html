@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Mission Tracker</title>
+    <title>No Second Mistake</title>
     <link rel="stylesheet" href="./styles.css">
     <script src="./config.public.js"></script>
   </head>
@@ -11,330 +11,130 @@
     <div class="app-shell">
       <header class="topbar">
         <div class="brand-block">
-          <p class="eyebrow">Mission Tracker</p>
-          <h1>Collaborative Operating System</h1>
-          <p class="brand-copy">Private pages, shared pages, inline comments, and conflict-safe sync.</p>
+          <p class="eyebrow">Personal Operating System</p>
+          <h1 class="brand-title">
+            <span class="principle-mark" lang="zh-Hans">不贰过</span>
+            <span>No Second Mistake</span>
+          </h1>
+          <p class="brand-copy">Turn each mistake into a better system.</p>
         </div>
 
-        <div class="workspace-switcher">
-          <label class="stacked-field compact-field">
-            <span>Page</span>
-            <select id="pageSelect" class="inline-select"></select>
-          </label>
-          <button class="text-button" id="newPageButton" type="button">New page</button>
-          <button class="text-button subtle" id="copyPageUrlButton" type="button">Copy page link</button>
-        </div>
-
-        <div class="top-actions" aria-label="Tracker controls">
+        <div class="top-actions" aria-label="Daily navigation">
           <button class="icon-button" id="previousDay" type="button" aria-label="Previous day">&lt;</button>
           <input id="datePicker" class="date-input" type="date" aria-label="Selected date">
           <button class="icon-button" id="nextDay" type="button" aria-label="Next day">&gt;</button>
           <button class="text-button" id="todayButton" type="button">Today</button>
-          <button class="text-button save-button" id="saveButton" type="button">Save now</button>
-          <button class="text-button" id="exportButton" type="button">Export</button>
-          <label class="text-button file-button">
-            Import
-            <input id="importInput" type="file" accept="application/json">
-          </label>
-          <span class="save-status" id="saveStatus" role="status" aria-live="polite">Synced</span>
+          <span class="save-status" id="saveStatus" role="status" aria-live="polite">Loading...</span>
         </div>
       </header>
 
-      <section class="notice-panel" id="noticePanel" hidden>
-        <div>
-          <p class="eyebrow">Workspace notice</p>
-          <p id="noticeText" class="notice-copy"></p>
-        </div>
-        <div class="notice-actions">
-          <button class="text-button subtle" id="noticeDismissButton" type="button">Dismiss</button>
-          <button class="text-button save-button" id="noticeAcceptButton" type="button" hidden>Continue</button>
-        </div>
-      </section>
-
-      <section class="auth-panel" id="authPanel">
-        <div>
-          <p class="eyebrow">Local Access</p>
-          <h2 id="authTitle">Sign in to collaborate</h2>
-          <p class="auth-copy" id="authCopy">Use Supabase Auth to open your own pages, join shared pages, and sync comments.</p>
-        </div>
-        <form class="auth-form" id="authForm">
-          <label class="stacked-field">
-            <span>Email</span>
-            <input id="authEmail" type="email" autocomplete="email">
-          </label>
-          <label class="stacked-field">
-            <span>Password</span>
-            <input id="authPassword" type="password" autocomplete="current-password">
-          </label>
-          <div class="auth-actions">
-            <button class="text-button save-button" id="signInButton" type="submit">Sign in</button>
-            <button class="text-button" id="signUpButton" type="button">Sign up</button>
-            <button class="text-button subtle" id="signOutButton" type="button" hidden>Sign out</button>
+      <main class="journal-shell">
+        <section class="journal-panel" aria-labelledby="dailyLoopTitle">
+          <div class="section-title">
+            <p class="eyebrow" id="selectedDateLabel">Today</p>
+            <h2 id="dailyLoopTitle">Daily Loop</h2>
           </div>
-          <p class="auth-message" id="authMessage"></p>
-        </form>
-      </section>
 
-      <main class="workspace-grid">
-        <div class="content-grid">
-          <section class="mission-panel">
-            <div class="section-title">
-              <p class="eyebrow">North Star</p>
-              <h2>Mission Core</h2>
-            </div>
-            <div class="field-head">
-              <label class="field-label" for="missionInput">Mission</label>
-              <button class="comment-chip" id="missionCommentButton" type="button">
-                <span>Comment</span>
-              </button>
-            </div>
-            <textarea id="missionInput" class="mission-input" rows="3"></textarea>
-            <div id="identityGrid" class="identity-grid"></div>
-          </section>
-
-          <section class="score-panel" aria-label="Score summary">
-            <div class="metric-card primary">
-              <div id="todayRing" class="score-ring" style="--score: 0deg">
-                <span id="todayScore">0%</span>
-              </div>
-              <div>
-                <p class="eyebrow">Today</p>
-                <h2>Alignment</h2>
-              </div>
-            </div>
-            <div class="metric-row">
-              <div class="metric-card">
-                <p class="metric-value" id="weekScore">0%</p>
-                <p class="metric-label">7-day avg</p>
-              </div>
-              <div class="metric-card">
-                <p class="metric-value" id="streakCount">0</p>
-                <p class="metric-label">day streak</p>
-              </div>
-            </div>
-            <div id="balanceBars" class="balance-bars"></div>
-          </section>
-
-          <section class="action-panel">
-            <div class="section-title horizontal">
-              <div>
-                <p class="eyebrow">Execution</p>
-                <h2>Daily Actions</h2>
-              </div>
-              <div id="selectedDateLabel" class="date-pill"></div>
-            </div>
-            <div id="actionBoard" class="action-board"></div>
-          </section>
-
-          <section class="reflection-panel">
-            <div class="section-title">
-              <p class="eyebrow">Feedback</p>
-              <h2>Reflection</h2>
-            </div>
-            <div class="reflection-grid">
-              <label class="stacked-field">
-                <div class="field-head">
-                  <span>One thing</span>
-                  <button class="comment-chip" id="oneThingCommentButton" type="button"><span>Comment</span></button>
-                </div>
-                <input id="oneThingInput" type="text" autocomplete="off">
-              </label>
-              <label class="stacked-field">
-                <div class="field-head">
-                  <span>Avoid today</span>
-                  <button class="comment-chip" id="avoidCommentButton" type="button"><span>Comment</span></button>
-                </div>
-                <input id="avoidInput" type="text" autocomplete="off">
-              </label>
-              <label class="stacked-field">
-                <div class="field-head">
-                  <span>Win</span>
-                  <button class="comment-chip" id="winCommentButton" type="button"><span>Comment</span></button>
-                </div>
-                <textarea id="winInput" rows="3"></textarea>
-              </label>
-              <label class="stacked-field">
-                <div class="field-head">
-                  <span>Lesson</span>
-                  <button class="comment-chip" id="lessonCommentButton" type="button"><span>Comment</span></button>
-                </div>
-                <textarea id="lessonInput" rows="3"></textarea>
-              </label>
-            </div>
-          </section>
-
-          <section class="principle-panel">
-            <div class="section-title">
-              <p class="eyebrow">Iteration</p>
-              <h2>Principles Lab</h2>
-            </div>
-            <div class="principle-form">
-              <label class="stacked-field">
-                <div class="field-head">
-                  <span>Pattern</span>
-                  <button class="comment-chip" id="patternCommentButton" type="button"><span>Comment</span></button>
-                </div>
-                <textarea id="patternInput" rows="3"></textarea>
-              </label>
-              <label class="stacked-field">
-                <div class="field-head">
-                  <span>Principle</span>
-                  <button class="comment-chip" id="principleCommentButton" type="button"><span>Comment</span></button>
-                </div>
-                <textarea id="principleInput" rows="3"></textarea>
-              </label>
-              <label class="stacked-field">
-                <div class="field-head">
-                  <span>Mechanism</span>
-                  <button class="comment-chip" id="mechanismCommentButton" type="button"><span>Comment</span></button>
-                </div>
-                <textarea id="mechanismInput" rows="3"></textarea>
-              </label>
-            </div>
-            <div id="principleList" class="principle-list"></div>
-          </section>
-
-          <section class="weekly-panel">
-            <div class="section-title horizontal">
-              <div>
-                <p class="eyebrow">Review</p>
-                <h2>7-Day Map</h2>
-              </div>
-              <button class="text-button subtle" id="clearDayButton" type="button">Clear day</button>
-            </div>
-            <div id="heatmap" class="heatmap"></div>
-          </section>
-        </div>
-
-        <aside class="sidebar-column">
-          <section class="sidebar-panel">
-            <div class="section-title">
-              <p class="eyebrow">Current Page</p>
-              <h2>Page Settings</h2>
-            </div>
-            <label class="stacked-field">
-              <span>Page title</span>
-              <input id="pageTitleInput" type="text" autocomplete="off">
+          <div class="field-grid">
+            <label class="journal-field large-field">
+              <span>Signal / Mistake</span>
+              <textarea id="signalInput" rows="5" placeholder="What happened? Name the event without self-blame."></textarea>
             </label>
-            <label class="stacked-field">
-              <span>Visibility</span>
-              <select id="pageVisibilitySelect" class="inline-select">
-                <option value="private">Private</option>
-                <option value="shared">Shared</option>
-              </select>
+
+            <label class="journal-field large-field">
+              <span>Root Condition</span>
+              <textarea id="rootConditionInput" rows="5" placeholder="What conditions made this likely to happen again?"></textarea>
             </label>
-            <div class="meta-card">
-              <div class="meta-row">
-                <span>Route</span>
-                <code id="pageSlugValue">/p/...</code>
-              </div>
-              <div class="meta-row">
-                <span>Your role</span>
-                <span id="pageRoleBadge" class="role-badge owner">owner</span>
-              </div>
-              <p id="pageMetaCopy" class="muted-copy"></p>
-            </div>
-          </section>
 
-          <section class="sidebar-panel">
-            <div class="section-title">
-              <p class="eyebrow">Invitations</p>
-              <h2>Pending Invites</h2>
-            </div>
-            <div id="pendingInviteList" class="stack-list"></div>
-          </section>
+            <label class="journal-field">
+              <span>Principle</span>
+              <textarea id="principleInput" rows="4" placeholder="What reusable rule should guide the next similar situation?"></textarea>
+            </label>
 
-          <section class="sidebar-panel sticky-panel">
-            <div class="tab-row">
-              <button class="tab-button active" data-sidebar-tab="comments" type="button">Comments</button>
-              <button class="tab-button" data-sidebar-tab="people" type="button">People</button>
-              <button class="tab-button" data-sidebar-tab="share" type="button">Share</button>
-            </div>
+            <label class="journal-field">
+              <span>Mechanism / Next Move</span>
+              <textarea id="mechanismInput" rows="4" placeholder="What system, default, or concrete next action prevents a repeat?"></textarea>
+            </label>
+          </div>
+        </section>
 
-            <div class="sidebar-section" data-sidebar-section="comments">
-              <div class="section-title">
-                <p class="eyebrow">Inline Threads</p>
-                <h2 id="selectedAnchorLabel">Choose a field</h2>
-              </div>
-              <div id="commentThreadList" class="thread-list"></div>
-              <div class="composer-card">
-                <label class="stacked-field">
-                  <span>New thread</span>
-                  <textarea id="newCommentBody" rows="3" placeholder="Comment on the selected field"></textarea>
-                </label>
-                <button class="text-button save-button" id="createThreadButton" type="button">Create thread</button>
-              </div>
+        <section class="ai-panel" aria-labelledby="aiPanelTitle">
+          <div class="section-title compact-title ai-title-row">
+            <div>
+              <p class="eyebrow">AI Dynamics</p>
+              <h2 id="aiPanelTitle">Use AI as a working model of the system.</h2>
             </div>
-
-            <div class="sidebar-section" data-sidebar-section="people" hidden>
-              <div class="section-title">
-                <p class="eyebrow">Collaborators</p>
-                <h2>People & Roles</h2>
-              </div>
-              <div id="memberList" class="stack-list"></div>
-
-              <div class="composer-card">
-                <label class="stacked-field">
-                  <span>Invite by email</span>
-                  <input id="inviteEmailInput" type="email" autocomplete="email" placeholder="teammate@example.com">
-                </label>
-                <div class="inline-form">
-                  <label class="stacked-field compact-field">
-                    <span>Role</span>
-                    <select id="inviteRoleSelect" class="inline-select">
-                      <option value="viewer">Viewer</option>
-                      <option value="commenter">Commenter</option>
-                      <option value="editor">Editor</option>
-                    </select>
-                  </label>
-                  <button class="text-button" id="inviteButton" type="button">Send invite</button>
-                </div>
-              </div>
-
-              <div class="section-subtitle">Pending page invites</div>
-              <div id="inviteList" class="stack-list"></div>
+            <div class="ai-config-fields">
+              <label class="model-field">
+                <span>Model</span>
+                <input id="aiModelInput" list="aiModelOptions" autocomplete="off" value="gpt-5.2">
+                <datalist id="aiModelOptions">
+                  <option value="gpt-5.5"></option>
+                  <option value="gpt-5.2"></option>
+                  <option value="gpt-5.1"></option>
+                </datalist>
+              </label>
+              <label class="model-field effort-field">
+                <span>Reasoning</span>
+                <select id="aiEffortSelect">
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high" selected>High</option>
+                </select>
+              </label>
             </div>
+          </div>
 
-            <div class="sidebar-section" data-sidebar-section="share" hidden>
-              <div class="section-title">
-                <p class="eyebrow">Share Access</p>
-                <h2>Share Links</h2>
-              </div>
-              <div class="composer-card">
-                <div class="inline-form">
-                  <label class="stacked-field compact-field">
-                    <span>Role</span>
-                    <select id="shareRoleSelect" class="inline-select">
-                      <option value="viewer">Viewer</option>
-                      <option value="commenter">Commenter</option>
-                      <option value="editor">Editor</option>
-                    </select>
-                  </label>
-                  <button class="text-button" id="createShareLinkButton" type="button">Create link</button>
-                </div>
-                <div id="recentShareLinkBox" class="recent-link-box" hidden>
-                  <p class="eyebrow">Raw link</p>
-                  <code id="recentShareLinkValue"></code>
-                  <p class="muted-copy">Copy it now. Only the token hash is stored after this session.</p>
-                </div>
-              </div>
-              <div id="shareLinkList" class="stack-list"></div>
-            </div>
-          </section>
+          <div class="ai-actions">
+            <button class="text-button ai-primary-button" id="analyzeButton" type="button">Analyze with AI</button>
+            <button class="text-button" id="saveAnalysisButton" type="button">Save Analysis</button>
+            <span class="ai-status" id="aiStatus" role="status" aria-live="polite">AI ready</span>
+          </div>
 
-          <section class="sidebar-panel conflict-panel" id="conflictBox" hidden>
-            <div class="section-title">
-              <p class="eyebrow">Conflict</p>
-              <h2>Choose a resolution</h2>
-            </div>
-            <div id="conflictSummary"></div>
-            <div class="inline-form">
-              <button class="text-button" id="useLocalConflictsButton" type="button">Keep my version</button>
-              <button class="text-button subtle" id="useRemoteConflictsButton" type="button">Use remote version</button>
-            </div>
-          </section>
-        </aside>
+          <label class="ai-draft-field">
+            <span>Analysis Draft</span>
+            <textarea id="aiOutput" rows="10" placeholder="Complete the daily loop, ask AI to model the dynamics, or paste analysis from another model here."></textarea>
+          </label>
+
+          <div class="chat-row">
+            <textarea id="aiChatInput" rows="3" placeholder="Ask a follow-up about the dynamics, intervention, or next experiment."></textarea>
+            <button class="text-button" id="aiChatButton" type="button">Ask</button>
+          </div>
+
+          <div class="saved-analyses">
+            <p class="eyebrow">Saved Analyses</p>
+            <div id="analysisList" class="analysis-list"></div>
+          </div>
+        </section>
+
+        <section class="anchors-panel" aria-labelledby="anchorsTitle">
+          <div class="section-title compact-title">
+            <p class="eyebrow">Ambition Anchors</p>
+            <h2 id="anchorsTitle">Today still points somewhere.</h2>
+          </div>
+
+          <div class="anchor-grid">
+            <label class="anchor-card venture">
+              <span>Entrepreneur</span>
+              <textarea id="ventureActionInput" rows="3" placeholder="One reality-facing move."></textarea>
+            </label>
+            <label class="anchor-card research">
+              <span>RL Research</span>
+              <textarea id="researchActionInput" rows="3" placeholder="One compounding research artifact."></textarea>
+            </label>
+            <label class="anchor-card family">
+              <span>Family</span>
+              <textarea id="familyActionInput" rows="3" placeholder="One act of presence or companionship."></textarea>
+            </label>
+          </div>
+        </section>
       </main>
+
+      <button class="manual-save-island" id="manualSaveIsland" type="button" aria-label="Save everything now">
+        <span class="island-dot" id="manualSaveDot" aria-hidden="true"></span>
+        <span class="island-icon" aria-hidden="true">Save</span>
+        <span class="island-label" id="manualSaveLabel">Saved</span>
+      </button>
     </div>
 
     <script type="module" src="./app.js"></script>

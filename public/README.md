@@ -532,3 +532,47 @@ Security notes:
 - The anon key is safe to expose in the browser only when RLS policies are enabled and correct.
 - Do not put a Supabase service role key in frontend code or Vercel public/static config.
 - The local `server.js` remains useful for private local JSON workflows, but the public product path should use Supabase.
+
+## Local Personal App
+
+Run the personal No Second Mistake app locally:
+
+```sh
+npm run local:start
+npm run local:open
+npm run local:stop
+```
+
+If `npm` or `node` is not available in your shell, use the fallback wrapper. It first tries system Node, then Codex's bundled Node:
+
+```sh
+./scripts/local-app.sh start
+./scripts/local-app.sh open
+./scripts/local-app.sh stop
+```
+
+Optional macOS login startup:
+
+```sh
+npm run local:install-autostart
+npm run local:uninstall-autostart
+```
+
+The local app listens on `http://127.0.0.1:4173` and stores personal tracker data under `data/personal-tracker.json`.
+
+## AI Proxy API
+
+To use an OpenAI-compatible proxy for AI Dynamics, add this to `.env`:
+
+```sh
+OPENAI_API_KEY=your_key
+OPENAI_MODEL=gpt-5.5
+OPENAI_REASONING_EFFORT=high
+OPENAI_BASE_URL=https://api.gptsapi.net/v1
+```
+
+Restart after changing `.env`:
+
+```sh
+./scripts/local-app.sh restart
+```

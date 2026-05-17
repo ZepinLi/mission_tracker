@@ -3,12 +3,24 @@ const { requirePageRole } = require("./permissions");
 const { addClient, broadcastPage } = require("./realtime");
 const comments = require("./services/comments");
 const pages = require("./services/pages");
+const personalTracker = require("./services/personal-tracker");
+const aiDynamics = require("./services/ai-dynamics");
 const { badRequest, notFound, readJson, routeParts, sendJson } = require("./utils");
 
 async function handleApi(req, res, url) {
   try {
     const parts = routeParts(url.pathname);
     if (parts[0] !== "api") return false;
+
+    if (parts[1] === "personal-tracker") {
+      await handlePersonalTracker(req, res, parts);
+      return true;
+    }
+
+    if (parts[1] === "ai") {
+      await handleAi(req, res, parts);
+      return true;
+    }
 
     if (parts[1] === "auth") {
       await handleAuth(req, res, parts);
@@ -59,6 +71,47 @@ async function handleApi(req, res, url) {
     });
     return true;
   }
+}
+
+async function handleAi(req, res, parts) {
+  if (req.method === "GET" && parts[2] === "config") {
+    sendJson(res, 200, aiDynamics.config());
+    return;
+  }
+
+  if (req.method === "POST" && parts[2] === "analyze") {
+    const payload = await readJson(req);
+    sendJson(res, 200, await aiDynamics.analyze(payload));
+    return;
+  }
+
+  if (req.method === "POST" && parts[2] === "chat") {
+    const payload = await readJson(req);
+    sendJson(res, 200, await aiDynamics.chat(payload));
+    return;
+  }
+
+  notFound(res);
+}
+
+async function handlePersonalTracker(req, res, parts) {
+  if (parts.length !== 2) {
+    notFound(res);
+    return;
+  }
+
+  if (req.method === "GET") {
+    sendJson(res, 200, personalTracker.loadTracker());
+    return;
+  }
+
+  if (req.method === "PUT") {
+    const payload = await readJson(req);
+    sendJson(res, 200, personalTracker.saveTracker(payload));
+    return;
+  }
+
+  notFound(res);
 }
 
 async function handleAuth(req, res, parts) {
