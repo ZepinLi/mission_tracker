@@ -38,7 +38,46 @@ const defaultCore = {
   actions: [],
 };
 
+function emptyPrinciple() {
+  return {
+    pattern: "",
+    rootCondition: "",
+    principle: "",
+    mechanism: "",
+  };
+}
+
+function normalizePrinciple(principle = {}) {
+  return {
+    pattern: String(principle?.pattern || ""),
+    rootCondition: String(principle?.rootCondition || ""),
+    principle: String(principle?.principle || ""),
+    mechanism: String(principle?.mechanism || ""),
+  };
+}
+
+function createLoopPage(seed = {}, index = 0, fallbackPrinciple = {}) {
+  const cardNumber = index + 1;
+  return {
+    id: String(seed.id || "loop-page-" + cardNumber),
+    cardNumber,
+    title: String(seed.title || "Card " + cardNumber),
+    createdAt: String(seed.createdAt || ""),
+    updatedAt: String(seed.updatedAt || ""),
+    principle: normalizePrinciple(seed.principle || fallbackPrinciple),
+  };
+}
+
+function normalizeLoopPages(entry = {}) {
+  const savedPages = Array.isArray(entry.loopPages) ? entry.loopPages : [];
+  const sourcePages = savedPages.length
+    ? savedPages
+    : [{ id: entry.activeLoopPageId || "loop-page-1", title: "Card 1", principle: entry.principle || {} }];
+  return sourcePages.map((page, index) => createLoopPage(page, index, entry.principle || {}));
+}
+
 function emptyEntry() {
+  const firstPage = createLoopPage({}, 0);
   return {
     version: 2,
     actions: {},
@@ -49,17 +88,21 @@ function emptyEntry() {
       win: "",
       lesson: "",
     },
-    principle: {
-      pattern: "",
-      rootCondition: "",
-      principle: "",
-      mechanism: "",
-    },
+    principle: normalizePrinciple(firstPage.principle),
+    loopPages: [firstPage],
+    activeLoopPageId: firstPage.id,
     aiAnalyses: [],
   };
 }
 
 function normalizeEntry(entry = {}) {
+  const loopPages = normalizeLoopPages(entry);
+  const requestedActiveId = String(entry.activeLoopPageId || "");
+  const activeLoopPageId = loopPages.some((page) => page.id === requestedActiveId)
+    ? requestedActiveId
+    : loopPages[0].id;
+  const activeLoopPage = loopPages.find((page) => page.id === activeLoopPageId) || loopPages[0];
+
   return {
     ...emptyEntry(),
     ...entry,
@@ -72,14 +115,9 @@ function normalizeEntry(entry = {}) {
       ...emptyEntry().reflection,
       ...(entry.reflection && typeof entry.reflection === "object" ? entry.reflection : {}),
     },
-    principle: {
-      ...emptyEntry().principle,
-      ...(entry.principle && typeof entry.principle === "object" ? entry.principle : {}),
-      pattern: String(entry.principle?.pattern || ""),
-      rootCondition: String(entry.principle?.rootCondition || ""),
-      principle: String(entry.principle?.principle || ""),
-      mechanism: String(entry.principle?.mechanism || ""),
-    },
+    principle: normalizePrinciple(activeLoopPage.principle),
+    loopPages,
+    activeLoopPageId,
     aiAnalyses: Array.isArray(entry.aiAnalyses) ? entry.aiAnalyses : [],
   };
 }

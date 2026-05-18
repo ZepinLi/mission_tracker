@@ -29,10 +29,28 @@
       </header>
 
       <main class="journal-shell">
-        <section class="journal-panel" aria-labelledby="dailyLoopTitle">
-          <div class="section-title">
-            <p class="eyebrow" id="selectedDateLabel">Today</p>
-            <h2 id="dailyLoopTitle">Daily Loop</h2>
+        <section class="journal-panel card-stack-panel" id="journalPanel" aria-labelledby="dailyLoopTitle" data-motion="idle" data-spread="false">
+          <div class="card-stack-layer layer-two" aria-hidden="true"></div>
+          <div class="card-stack-layer layer-one" aria-hidden="true"></div>
+          <span class="loop-card-badge" id="loopCardBadge" aria-label="Current card number">1</span>
+
+          <div class="section-title loop-card-header">
+            <div>
+              <p class="eyebrow" id="selectedDateLabel">Today</p>
+              <h2 id="dailyLoopTitle">Daily Loop</h2>
+            </div>
+            <div class="loop-card-controls" aria-label="Daily loop pages">
+              <button class="mini-icon-button" id="previousLoopPage" type="button" aria-label="Previous loop page">&lt;</button>
+              <span class="loop-card-meta" id="loopCardMeta">1 / 1</span>
+              <button class="mini-icon-button" id="nextLoopPage" type="button" aria-label="Next loop page">&gt;</button>
+              <button class="text-button add-card-button" id="addLoopPage" type="button">Add page</button>
+              <button class="text-button spread-card-button" id="toggleLoopSpread" type="button">Spread</button>
+              <button class="text-button delete-card-button" id="deleteLoopPage" type="button">Delete</button>
+            </div>
+          </div>
+
+          <div class="loop-spread-tray" id="loopSpreadTray" hidden>
+            <div class="loop-spread-list" id="loopSpreadList" aria-label="Daily loop card overview"></div>
           </div>
 
           <div class="field-grid">
@@ -135,6 +153,20 @@
         <span class="island-icon" aria-hidden="true">Save</span>
         <span class="island-label" id="manualSaveLabel">Saved</span>
       </button>
+
+      <div class="analysis-modal" id="analysisModal" hidden>
+        <button class="analysis-modal-backdrop" type="button" data-close-analysis aria-label="Close analysis reader"></button>
+        <article class="analysis-reader" role="dialog" aria-modal="true" aria-labelledby="analysisModalTitle">
+          <header class="analysis-reader-header">
+            <div>
+              <p class="eyebrow" id="analysisModalMeta">Saved analysis</p>
+              <h2 id="analysisModalTitle">Analysis Reader</h2>
+            </div>
+            <button class="icon-button reader-close-button" type="button" data-close-analysis aria-label="Close analysis reader">x</button>
+          </header>
+          <div class="analysis-reader-body" id="analysisModalBody"></div>
+        </article>
+      </div>
     </div>
 
     <script type="module" src="./app.js"></script>

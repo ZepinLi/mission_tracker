@@ -116,6 +116,46 @@ test("local backend supports invite and share-link membership", () => {
 
 const personalTracker = require("../server/services/personal-tracker");
 
+test("loop pages can be deleted and renumbered", () => {
+  const previousState = fs.existsSync(personalTracker.STATE_FILE)
+    ? fs.readFileSync(personalTracker.STATE_FILE, "utf8")
+    : null;
+
+  try {
+    const date = "2099-02-01";
+    const saved = personalTracker.saveTracker({
+      entries: {
+        [date]: {
+          activeLoopPageId: "loop-page-3",
+          loopPages: [
+            {
+              id: "loop-page-1",
+              principle: { pattern: "First signal.", principle: "First rule." },
+            },
+            {
+              id: "loop-page-3",
+              cardNumber: 3,
+              principle: { pattern: "Third signal.", principle: "Third rule." },
+            },
+          ],
+        },
+      },
+    });
+
+    assert.equal(saved.entries[date].loopPages.length, 2);
+    assert.equal(saved.entries[date].loopPages[0].cardNumber, 1);
+    assert.equal(saved.entries[date].loopPages[1].cardNumber, 2);
+    assert.equal(saved.entries[date].principle.pattern, "Third signal.");
+    assert.equal(saved.entries[date].activeLoopPageId, "loop-page-3");
+  } finally {
+    if (previousState == null) {
+      fs.rmSync(personalTracker.STATE_FILE, { force: true });
+    } else {
+      fs.writeFileSync(personalTracker.STATE_FILE, previousState);
+    }
+  }
+});
+
 test("personal tracker persists local daily loop", () => {
   const previousState = fs.existsSync(personalTracker.STATE_FILE)
     ? fs.readFileSync(personalTracker.STATE_FILE, "utf8")
@@ -150,6 +190,8 @@ test("personal tracker persists local daily loop", () => {
   });
 
   assert.equal(saved.entries[firstDate].principle.rootCondition, "No protected calendar slot.");
+  assert.equal(saved.entries[firstDate].loopPages[0].principle.pattern, "Missed the research block.");
+  assert.equal(saved.entries[firstDate].loopPages[0].cardNumber, 1);
   assert.equal(personalTracker.loadTracker().entries[firstDate].keyActions.family, "Evening walk.");
 
   const beforeSecondSave = personalTracker.loadTracker();
@@ -168,8 +210,38 @@ test("personal tracker persists local daily loop", () => {
     },
   });
 
+  const withPages = personalTracker.loadTracker();
+  personalTracker.saveTracker({
+    ...withPages,
+    entries: {
+      ...withPages.entries,
+      [firstDate]: {
+        ...withPages.entries[firstDate],
+        activeLoopPageId: "loop-page-2",
+        loopPages: [
+          withPages.entries[firstDate].loopPages[0],
+          {
+            id: "loop-page-2",
+            cardNumber: 2,
+            title: "Card 2",
+            principle: {
+              pattern: "Second signal.",
+              rootCondition: "Second condition.",
+              principle: "Second rule.",
+              mechanism: "Second mechanism.",
+            },
+          },
+        ],
+      },
+    },
+  });
+
   const reloaded = personalTracker.loadTracker();
-  assert.equal(reloaded.entries[firstDate].principle.pattern, "Missed the research block.");
+  assert.equal(reloaded.entries[firstDate].loopPages.length, 2);
+  assert.equal(reloaded.entries[firstDate].loopPages[1].cardNumber, 2);
+  assert.equal(reloaded.entries[firstDate].activeLoopPageId, "loop-page-2");
+  assert.equal(reloaded.entries[firstDate].principle.pattern, "Second signal.");
+  assert.equal(reloaded.entries[firstDate].loopPages[0].principle.pattern, "Missed the research block.");
   assert.equal(reloaded.entries[secondDate].principle.mechanism, "Close email before opening code.");
   } finally {
     if (previousState == null) {

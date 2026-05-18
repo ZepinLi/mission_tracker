@@ -1,5 +1,5 @@
 import { formatShortDate, localDateISO, parseLocalDate } from "./lib/date.js";
-import { ensureEntry, mergeCore, normalizeTrackerState } from "./state/schema.js";
+import { createLoopPage, ensureEntry, mergeCore, normalizeTrackerState } from "./state/schema.js";
 
 const SAVE_DELAY_MS = 700;
 
@@ -10,6 +10,10 @@ function escapeHTML(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function formatInlineMarkdown(value) {
+  return escapeHTML(value).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
 }
 
 function markdownToHtml(markdown) {
@@ -33,7 +37,7 @@ function markdownToHtml(markdown) {
     const heading = trimmed.match(/^#{1,3}\s+(.+)$/);
     if (heading) {
       closeList();
-      html.push("<h3>" + escapeHTML(heading[1]) + "</h3>");
+      html.push("<h3>" + formatInlineMarkdown(heading[1]) + "</h3>");
       continue;
     }
     const bullet = trimmed.match(/^[-*]\s+(.+)$/);
@@ -42,11 +46,11 @@ function markdownToHtml(markdown) {
         html.push("<ul>");
         listOpen = true;
       }
-      html.push("<li>" + escapeHTML(bullet[1]) + "</li>");
+      html.push("<li>" + formatInlineMarkdown(bullet[1]) + "</li>");
       continue;
     }
     closeList();
-    html.push("<p>" + escapeHTML(trimmed) + "</p>");
+    html.push("<p>" + formatInlineMarkdown(trimmed) + "</p>");
   }
   closeList();
   return html.join("");
@@ -64,6 +68,9 @@ export class MissionTrackerController {
     this.aiConfig = { defaultModel: "gpt-5.2", defaultReasoningEffort: "high", hasApiKey: false };
     this.currentAnalysis = null;
     this.saveStatusTimer = null;
+    this.previousFocus = null;
+    this.cardMotionTimer = null;
+    this.isLoopSpread = false;
   }
 
   async init() {
@@ -110,18 +117,64 @@ export class MissionTrackerController {
       this.setSaveStatus("Unsaved", "dirty");
     });
     this.dom.manualSaveIsland.addEventListener("click", () => this.manualSaveAll());
+    this.dom.previousLoopPage.addEventListener("click", () => this.shiftLoopPage(-1));
+    this.dom.nextLoopPage.addEventListener("click", () => this.shiftLoopPage(1));
+    this.dom.addLoopPage.addEventListener("click", () => this.addLoopPage());
+    this.dom.deleteLoopPage.addEventListener("click", () => this.deleteActiveLoopPage());
+    this.dom.toggleLoopSpread.addEventListener("click", () => this.toggleLoopSpread());
+    this.dom.loopSpreadList.addEventListener("click", (event) => {
+      const card = event.target.closest("[data-loop-page-id]");
+      if (card) this.selectLoopPageFromSpread(card.dataset.loopPageId);
+    });
+    this.dom.loopSpreadList.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const card = event.target.closest("[data-loop-page-id]");
+      if (!card) return;
+      event.preventDefault();
+      this.selectLoopPageFromSpread(card.dataset.loopPageId);
+    });
+    this.dom.journalPanel.addEventListener("click", (event) => {
+      if (!this.isLoopSpread) return;
+      if (event.target.closest(".loop-card-controls, .loop-spread-tray, textarea, button, input")) return;
+      this.toggleLoopSpread(false);
+    });
+    this.dom.analysisList.addEventListener("click", (event) => {
+      const trigger = event.target.closest("[data-open-analysis]");
+      if (trigger) this.openAnalysisReader(trigger.dataset.openAnalysis);
+    });
+    this.dom.analysisList.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const trigger = event.target.closest("[data-open-analysis]");
+      if (!trigger) return;
+      event.preventDefault();
+      this.openAnalysisReader(trigger.dataset.openAnalysis);
+    });
+    this.dom.analysisModal.addEventListener("click", (event) => {
+      if (event.target.closest("[data-close-analysis]")) this.closeAnalysisReader();
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !this.dom.analysisModal.hidden) this.closeAnalysisReader();
+    });
 
-    const bindings = [
-      [this.dom.signalInput, (entry, value) => { entry.principle.pattern = value; }],
-      [this.dom.rootConditionInput, (entry, value) => { entry.principle.rootCondition = value; }],
-      [this.dom.principleInput, (entry, value) => { entry.principle.principle = value; }],
-      [this.dom.mechanismInput, (entry, value) => { entry.principle.mechanism = value; }],
+    const loopBindings = [
+      [this.dom.signalInput, (principle, value) => { principle.pattern = value; }],
+      [this.dom.rootConditionInput, (principle, value) => { principle.rootCondition = value; }],
+      [this.dom.principleInput, (principle, value) => { principle.principle = value; }],
+      [this.dom.mechanismInput, (principle, value) => { principle.mechanism = value; }],
+    ];
+    const actionBindings = [
       [this.dom.ventureActionInput, (entry, value) => { entry.keyActions.venture = value; }],
       [this.dom.researchActionInput, (entry, value) => { entry.keyActions.research = value; }],
       [this.dom.familyActionInput, (entry, value) => { entry.keyActions.family = value; }],
     ];
 
-    for (const [element, assign] of bindings) {
+    for (const [element, assign] of loopBindings) {
+      element.addEventListener("input", (event) => {
+        this.updateActiveLoopPage((principle) => assign(principle, event.target.value));
+        this.markDirty();
+      });
+    }
+    for (const [element, assign] of actionBindings) {
       element.addEventListener("input", (event) => {
         assign(this.currentEntry(), event.target.value);
         this.markDirty();
@@ -131,6 +184,142 @@ export class MissionTrackerController {
 
   currentEntry() {
     return ensureEntry(this.state.entries, this.selectedDate);
+  }
+
+  activeLoopPage(entry = this.currentEntry()) {
+    if (!Array.isArray(entry.loopPages) || !entry.loopPages.length) {
+      const firstPage = createLoopPage({ principle: entry.principle || {} }, 0);
+      entry.loopPages = [firstPage];
+      entry.activeLoopPageId = firstPage.id;
+    }
+    let page = entry.loopPages.find((item) => item.id === entry.activeLoopPageId);
+    if (!page) {
+      page = entry.loopPages[0];
+      entry.activeLoopPageId = page.id;
+    }
+    return page;
+  }
+
+  activeLoopPageIndex(entry = this.currentEntry()) {
+    const page = this.activeLoopPage(entry);
+    return Math.max(0, entry.loopPages.findIndex((item) => item.id === page.id));
+  }
+
+  syncLegacyPrinciple(entry = this.currentEntry()) {
+    this.renumberLoopPages(entry);
+    const page = this.activeLoopPage(entry);
+    entry.principle = { ...page.principle };
+    return page;
+  }
+
+  renumberLoopPages(entry = this.currentEntry()) {
+    entry.loopPages = (entry.loopPages || []).map((page, index) => ({
+      ...page,
+      cardNumber: index + 1,
+      title: page.title || "Card " + (index + 1),
+    }));
+  }
+
+  updateActiveLoopPage(assign) {
+    const entry = this.currentEntry();
+    const page = this.activeLoopPage(entry);
+    assign(page.principle, page, entry);
+    page.updatedAt = new Date().toISOString();
+    this.syncLegacyPrinciple(entry);
+  }
+
+  setActiveLoopPage(pageId, motion = "slide") {
+    const entry = this.currentEntry();
+    const page = entry.loopPages.find((item) => item.id === pageId);
+    if (!page || page.id === entry.activeLoopPageId) return;
+    entry.activeLoopPageId = page.id;
+    this.syncLegacyPrinciple(entry);
+    this.currentAnalysis = null;
+    this.markDirty();
+    this.render(motion);
+  }
+
+  shiftLoopPage(delta) {
+    const entry = this.currentEntry();
+    const pages = entry.loopPages || [];
+    if (pages.length < 2) return;
+    const currentIndex = this.activeLoopPageIndex(entry);
+    const nextIndex = (currentIndex + delta + pages.length) % pages.length;
+    this.setActiveLoopPage(pages[nextIndex].id, delta > 0 ? "next" : "previous");
+  }
+
+  addLoopPage() {
+    const entry = this.currentEntry();
+    const now = new Date().toISOString();
+    const nextIndex = (entry.loopPages || []).length;
+    const page = createLoopPage({
+      id: "loop-page-" + Date.now(),
+      title: "Card " + (nextIndex + 1),
+      createdAt: now,
+      updatedAt: now,
+    }, nextIndex);
+    entry.loopPages = [...(entry.loopPages || []), page];
+    entry.activeLoopPageId = page.id;
+    this.isLoopSpread = false;
+    this.syncLegacyPrinciple(entry);
+    this.currentAnalysis = null;
+    this.markDirty();
+    this.render("deal");
+  }
+
+  deleteActiveLoopPage() {
+    const entry = this.currentEntry();
+    const pages = entry.loopPages || [];
+    if (pages.length <= 1) return;
+    const currentIndex = this.activeLoopPageIndex(entry);
+    const removedId = this.activeLoopPage(entry).id;
+    entry.loopPages = pages.filter((page) => page.id !== removedId);
+    this.renumberLoopPages(entry);
+    const nextIndex = Math.min(currentIndex, entry.loopPages.length - 1);
+    entry.activeLoopPageId = entry.loopPages[nextIndex].id;
+    this.isLoopSpread = false;
+    this.syncLegacyPrinciple(entry);
+    this.currentAnalysis = null;
+    this.markDirty();
+    this.render("delete");
+  }
+
+  toggleLoopSpread(force) {
+    this.isLoopSpread = typeof force === "boolean" ? force : !this.isLoopSpread;
+    this.render(this.isLoopSpread ? "spread" : "stack");
+  }
+
+  selectLoopPageFromSpread(pageId) {
+    const entry = this.currentEntry();
+    const page = entry.loopPages.find((item) => item.id === pageId);
+    if (!page) return;
+    entry.activeLoopPageId = page.id;
+    this.isLoopSpread = false;
+    this.syncLegacyPrinciple(entry);
+    this.currentAnalysis = null;
+    this.markDirty();
+    this.render("spread-select");
+  }
+
+  renderCardMotion(motion) {
+    if (!this.dom.journalPanel) return;
+    window.clearTimeout(this.cardMotionTimer);
+    this.dom.journalPanel.dataset.motion = motion || "idle";
+    if (motion && motion !== "idle") {
+      this.cardMotionTimer = window.setTimeout(() => {
+        this.dom.journalPanel.dataset.motion = "idle";
+      }, 360);
+    }
+  }
+
+  loopPreviewText(page) {
+    const principle = page.principle || {};
+    const signal = String(principle.pattern || "").trim();
+    const rule = String(principle.principle || "").trim();
+    return {
+      signal: signal || "No signal yet.",
+      principle: rule || "No principle yet.",
+    };
   }
 
   markDirty() {
@@ -149,6 +338,8 @@ export class MissionTrackerController {
     window.clearTimeout(this.saveTimer);
     this.isSaving = true;
     this.setSaveStatus("Saving...", "saving");
+
+    this.syncLegacyPrinciple(this.currentEntry());
 
     try {
       const saved = await this.repository.saveTracker({
@@ -180,13 +371,15 @@ export class MissionTrackerController {
   }
 
   async analyzeWithAi() {
+    this.syncLegacyPrinciple(this.currentEntry());
     await this.saveNow();
     this.setAiStatus("AI thinking...", "thinking");
     this.dom.analyzeButton.disabled = true;
     this.dom.saveAnalysisButton.disabled = true;
 
     try {
-      this.currentAnalysis = await this.repository.analyzeWithAi({
+      const page = this.activeLoopPage();
+      const result = await this.repository.analyzeWithAi({
         date: this.selectedDate,
         model: this.dom.aiModelInput.value,
         reasoningEffort: this.dom.aiEffortSelect.value,
@@ -194,6 +387,15 @@ export class MissionTrackerController {
         recentEntries: this.recentEntries(),
         core: this.state.core,
       });
+      this.currentAnalysis = {
+        ...result,
+        loopPageId: page.id,
+        inputSummary: {
+          ...(result.inputSummary || {}),
+          loopPageId: page.id,
+          loopCard: this.activeLoopPageIndex() + 1,
+        },
+      };
       this.renderAiOutput();
       this.setAiStatus("Analysis ready");
       this.dom.saveAnalysisButton.disabled = false;
@@ -253,8 +455,14 @@ export class MissionTrackerController {
     this.ensureDraftAnalysis();
     if (!this.currentAnalysis) return false;
     const entry = this.currentEntry();
+    const page = this.activeLoopPage(entry);
+    const analysis = {
+      ...this.currentAnalysis,
+      loopPageId: this.currentAnalysis.loopPageId || page.id,
+    };
     const existing = Array.isArray(entry.aiAnalyses) ? entry.aiAnalyses : [];
-    entry.aiAnalyses = [this.currentAnalysis, ...existing.filter((item) => item.id !== this.currentAnalysis.id)].slice(0, 20);
+    entry.aiAnalyses = [analysis, ...existing.filter((item) => item.id !== analysis.id)].slice(0, 20);
+    this.currentAnalysis = analysis;
     return true;
   }
 
@@ -281,11 +489,13 @@ export class MissionTrackerController {
     this.setSelectedDate(localDateISO(date));
   }
 
-  render() {
+  render(motion = "idle") {
     const entry = this.currentEntry();
-    const principle = entry.principle || {};
+    const page = this.activeLoopPage(entry);
+    const principle = page.principle || {};
     const keyActions = entry.keyActions || {};
 
+    this.syncLegacyPrinciple(entry);
     this.dom.selectedDateLabel.textContent = formatShortDate(this.selectedDate);
     this.dom.datePicker.value = this.selectedDate;
     this.dom.signalInput.value = principle.pattern || "";
@@ -295,10 +505,56 @@ export class MissionTrackerController {
     this.dom.ventureActionInput.value = keyActions.venture || "";
     this.dom.researchActionInput.value = keyActions.research || "";
     this.dom.familyActionInput.value = keyActions.family || "";
+    this.renderLoopPageMeta(entry);
+    this.renderLoopSpread(entry);
+    this.renderCardMotion(motion);
     this.renderAnalysisList();
     if (!this.currentAnalysis) {
       this.dom.aiOutput.value = "";
     }
+  }
+
+  renderLoopPageMeta(entry = this.currentEntry()) {
+    const pages = entry.loopPages || [];
+    const index = this.activeLoopPageIndex(entry);
+    const page = pages[index] || this.activeLoopPage(entry);
+    const currentNumber = index + 1;
+    const total = pages.length;
+
+    this.renumberLoopPages(entry);
+    this.dom.loopCardMeta.textContent = currentNumber + " / " + total;
+    this.dom.loopCardBadge.textContent = String(currentNumber);
+    this.dom.previousLoopPage.disabled = total < 2;
+    this.dom.nextLoopPage.disabled = total < 2;
+    this.dom.deleteLoopPage.disabled = total < 2;
+    this.dom.toggleLoopSpread.textContent = this.isLoopSpread ? "Stack" : "Spread";
+    this.dom.toggleLoopSpread.disabled = total < 2;
+    this.dom.journalPanel.classList.toggle("has-multiple-cards", total > 1);
+    this.dom.journalPanel.classList.toggle("is-spread", this.isLoopSpread);
+    this.dom.journalPanel.dataset.spread = this.isLoopSpread ? "true" : "false";
+  }
+
+  renderLoopSpread(entry = this.currentEntry()) {
+    const pages = entry.loopPages || [];
+    this.dom.loopSpreadTray.hidden = !this.isLoopSpread || pages.length < 2;
+    if (this.dom.loopSpreadTray.hidden) {
+      this.dom.loopSpreadList.innerHTML = "";
+      return;
+    }
+    const activeId = this.activeLoopPage(entry).id;
+    this.dom.loopSpreadList.innerHTML = pages.map((page, index) => {
+      const preview = this.loopPreviewText(page);
+      const active = page.id === activeId ? " active" : "";
+      return [
+        '<button class="loop-spread-card' + active + '" type="button" data-loop-page-id="' + escapeHTML(page.id) + '">',
+        '<span class="loop-spread-badge">' + String(index + 1) + '</span>',
+        '<strong>Signal</strong>',
+        '<p>' + escapeHTML(preview.signal) + '</p>',
+        '<strong>Principle</strong>',
+        '<p>' + escapeHTML(preview.principle) + '</p>',
+        '</button>',
+      ].join("");
+    }).join("");
   }
 
   handleManualAnalysisInput() {
@@ -315,6 +571,7 @@ export class MissionTrackerController {
       reasoningEffort: this.currentAnalysis?.reasoningEffort || "manual",
       promptType: this.currentAnalysis?.promptType || "manual-dynamics-analysis",
       inputSummary: this.currentAnalysis?.inputSummary || {},
+      loopPageId: this.currentAnalysis?.loopPageId || this.activeLoopPage().id,
       analysisText: text,
       messages: this.currentAnalysis?.messages || [],
     };
@@ -345,17 +602,46 @@ export class MissionTrackerController {
     }
     this.dom.analysisList.innerHTML = analyses.map((analysis) => {
       const created = analysis.createdAt ? new Date(analysis.createdAt).toLocaleString() : "Saved analysis";
-      const text = String(analysis.analysisText || "");
+      const text = String(analysis.analysisText || "").trim();
+      const preview = text || "No analysis text saved.";
       return [
-        '<article class="analysis-card">',
+        '<article class="analysis-card" data-open-analysis="' + escapeHTML(analysis.id) + '" tabindex="0" role="button">',
+        '<div class="analysis-card-header">',
         '<div>',
         '<strong>' + escapeHTML(analysis.model || "AI model") + '</strong>',
         '<span>' + escapeHTML(created) + '</span>',
         '</div>',
-        '<p>' + escapeHTML(text.slice(0, 220)) + (text.length > 220 ? '...' : '') + '</p>',
+        '<span class="analysis-read-button" data-open-analysis="' + escapeHTML(analysis.id) + '">Zoom out</span>',
+        '</div>',
+        '<p class="analysis-preview">' + escapeHTML(preview) + '</p>',
         '</article>',
       ].join("");
     }).join("");
+  }
+
+  openAnalysisReader(id) {
+    const analyses = this.currentEntry().aiAnalyses || [];
+    const analysis = analyses.find((item) => item.id === id);
+    if (!analysis) return;
+    const created = analysis.createdAt ? new Date(analysis.createdAt).toLocaleString() : "Saved analysis";
+    const model = analysis.model || "AI model";
+
+    this.previousFocus = document.activeElement;
+    this.dom.analysisModalTitle.textContent = model;
+    this.dom.analysisModalMeta.textContent = created;
+    this.dom.analysisModalBody.innerHTML = markdownToHtml(analysis.analysisText || "No analysis text saved.");
+    this.dom.analysisModal.hidden = false;
+    document.body.classList.add("modal-open");
+    this.dom.analysisModal.querySelector("[data-close-analysis]")?.focus();
+  }
+
+  closeAnalysisReader() {
+    this.dom.analysisModal.hidden = true;
+    document.body.classList.remove("modal-open");
+    if (this.previousFocus && typeof this.previousFocus.focus === "function") {
+      this.previousFocus.focus();
+    }
+    this.previousFocus = null;
   }
 
   setSaveStatus(message, state = "saved") {

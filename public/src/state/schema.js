@@ -89,7 +89,46 @@ export const defaultCore = {
   ],
 };
 
+export function emptyPrinciple() {
+  return {
+    pattern: "",
+    rootCondition: "",
+    principle: "",
+    mechanism: "",
+  };
+}
+
+export function normalizePrinciple(principle = {}) {
+  return {
+    pattern: String(principle?.pattern || ""),
+    rootCondition: String(principle?.rootCondition || ""),
+    principle: String(principle?.principle || ""),
+    mechanism: String(principle?.mechanism || ""),
+  };
+}
+
+export function createLoopPage(seed = {}, index = 0, fallbackPrinciple = {}) {
+  const cardNumber = index + 1;
+  return {
+    id: String(seed.id || "loop-page-" + cardNumber),
+    cardNumber,
+    title: String(seed.title || "Card " + cardNumber),
+    createdAt: String(seed.createdAt || ""),
+    updatedAt: String(seed.updatedAt || ""),
+    principle: normalizePrinciple(seed.principle || fallbackPrinciple),
+  };
+}
+
+function normalizeLoopPages(savedEntry = {}) {
+  const savedPages = Array.isArray(savedEntry.loopPages) ? savedEntry.loopPages : [];
+  const sourcePages = savedPages.length
+    ? savedPages
+    : [{ id: savedEntry.activeLoopPageId || "loop-page-1", title: "Card 1", principle: savedEntry.principle || {} }];
+  return sourcePages.map((page, index) => createLoopPage(page, index, savedEntry.principle || {}));
+}
+
 export function createEmptyEntry() {
+  const firstPage = createLoopPage({}, 0);
   return {
     version: ENTRY_VERSION,
     actions: {},
@@ -100,12 +139,9 @@ export function createEmptyEntry() {
       win: "",
       lesson: "",
     },
-    principle: {
-      pattern: "",
-      rootCondition: "",
-      principle: "",
-      mechanism: "",
-    },
+    principle: normalizePrinciple(firstPage.principle),
+    loopPages: [firstPage],
+    activeLoopPageId: firstPage.id,
     aiAnalyses: [],
   };
 }
@@ -144,6 +180,12 @@ export function normalizeEntry(savedEntry) {
     };
     return result;
   }, {});
+  const loopPages = normalizeLoopPages(savedEntry);
+  const requestedActiveId = String(savedEntry.activeLoopPageId || "");
+  const activeLoopPageId = loopPages.some((page) => page.id === requestedActiveId)
+    ? requestedActiveId
+    : loopPages[0].id;
+  const activeLoopPage = loopPages.find((page) => page.id === activeLoopPageId) || loopPages[0];
 
   return {
     version: ENTRY_VERSION,
@@ -158,12 +200,9 @@ export function normalizeEntry(savedEntry) {
       win: String(savedEntry.reflection?.win || ""),
       lesson: String(savedEntry.reflection?.lesson || ""),
     },
-    principle: {
-      pattern: String(savedEntry.principle?.pattern || ""),
-      rootCondition: String(savedEntry.principle?.rootCondition || ""),
-      principle: String(savedEntry.principle?.principle || ""),
-      mechanism: String(savedEntry.principle?.mechanism || ""),
-    },
+    principle: normalizePrinciple(activeLoopPage.principle),
+    loopPages,
+    activeLoopPageId,
     aiAnalyses: Array.isArray(savedEntry.aiAnalyses) ? savedEntry.aiAnalyses : [],
   };
 }
@@ -254,6 +293,9 @@ export function hasVisibleContent(entry) {
   if (Object.values(normalized.keyActions).some((value) => String(value || "").trim())) return true;
   if (Object.values(normalized.reflection).some((value) => String(value || "").trim())) return true;
   if (Object.values(normalized.principle).some((value) => String(value || "").trim())) return true;
+  if ((normalized.loopPages || []).some((page) => {
+    return Object.values(page.principle || {}).some((value) => String(value || "").trim());
+  })) return true;
   return false;
 }
 
