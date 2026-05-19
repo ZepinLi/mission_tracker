@@ -45,6 +45,12 @@ export function createPersonalRepository(publicConfig = {}) {
         body: payload,
       });
     },
+    async extractMemory(payload) {
+      return request("/api/ai/extract-memory", {
+        method: "POST",
+        body: payload,
+      });
+    },
     async saveTracker(state) {
       return request("/api/personal-tracker", {
         method: "PUT",

@@ -3,6 +3,15 @@ const { randomId, nowIso } = require("../utils");
 const DEFAULT_MODEL = "gpt-5.2";
 const DEFAULT_REASONING_EFFORT = "high";
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+const MEMORY_TYPES = new Set([
+  "recurring_pattern",
+  "root_condition",
+  "principle",
+  "mechanism",
+  "open_loop",
+  "experiment",
+  "identity_signal",
+]);
 
 function configuredModel() {
   return process.env.OPENAI_MODEL || DEFAULT_MODEL;
@@ -70,6 +79,20 @@ function recentContext(recentEntries = {}) {
     }));
 }
 
+function memoryContext(memory = {}) {
+  const items = Array.isArray(memory.items) ? memory.items : Array.isArray(memory) ? memory : [];
+  return items
+    .filter((item) => String(item.status || "accepted") === "accepted")
+    .slice(0, 24)
+    .map((item) => ({
+      type: String(item.type || "recurring_pattern"),
+      title: String(item.title || ""),
+      body: String(item.body || ""),
+      confidence: Number(item.confidence) || 0.5,
+      source: item.source || {},
+    }));
+}
+
 function dynamicsInstructions() {
   return [
     "You are an AI dynamics model for a local personal No Second Mistake system.",
@@ -81,7 +104,7 @@ function dynamicsInstructions() {
   ].join("\n");
 }
 
-function analysisInput({ date, entry, recentEntries, core }) {
+function analysisInput({ date, entry, recentEntries, core, memoryContext: memory }) {
   return [
     { role: "developer", content: dynamicsInstructions() },
     {
@@ -93,6 +116,7 @@ function analysisInput({ date, entry, recentEntries, core }) {
           mission: core?.mission || "Turn each mistake into a better system.",
           today: pickEntrySummary(entry),
           recentContext: recentContext(recentEntries),
+          memoryContext: memoryContext(memory),
         },
         null,
         2
@@ -101,7 +125,7 @@ function analysisInput({ date, entry, recentEntries, core }) {
   ];
 }
 
-function chatInput({ date, entry, analysis, messages, userMessage }) {
+function chatInput({ date, entry, analysis, messages, userMessage, memoryContext: memory }) {
   return [
     {
       role: "developer",
@@ -117,9 +141,44 @@ function chatInput({ date, entry, analysis, messages, userMessage }) {
         {
           date,
           today: pickEntrySummary(entry),
+          memoryContext: memoryContext(memory),
           currentAnalysis: analysis || "",
           previousMessages: (messages || []).slice(-10),
           followUp: String(userMessage || ""),
+        },
+        null,
+        2
+      ),
+    },
+  ];
+}
+
+function memoryExtractionInstructions() {
+  return [
+    "You extract long-term memory candidates for a local personal No Second Mistake system.",
+    "Only extract reusable knowledge that can improve future analysis.",
+    "Prefer durable dynamics: recurring patterns, root conditions, principles, mechanisms, open loops, experiments, and identity signals.",
+    "Avoid generic advice, moral judgment, therapy claims, medical claims, legal claims, or financial claims.",
+    "Return JSON only. The JSON shape must be {\"candidates\":[{\"type\":\"recurring_pattern|root_condition|principle|mechanism|open_loop|experiment|identity_signal\",\"title\":\"short title\",\"body\":\"specific reusable memory\",\"confidence\":0.0}]}",
+    "Return at most 6 candidates.",
+  ].join("\n");
+}
+
+function memoryExtractionInput({ date, entry, analysis, recentEntries, core, memoryContext: memory, source = {} }) {
+  return [
+    { role: "developer", content: memoryExtractionInstructions() },
+    {
+      role: "user",
+      content: JSON.stringify(
+        {
+          task: "Extract human-reviewable long-term memory candidates from this No Second Mistake material.",
+          date,
+          source,
+          mission: core?.mission || "Turn each mistake into a better system.",
+          today: pickEntrySummary(entry),
+          analysis: String(analysis || ""),
+          recentContext: recentContext(recentEntries),
+          existingMemory: memoryContext(memory),
         },
         null,
         2
@@ -178,6 +237,43 @@ function parseOpenAiResponseText(text) {
   return { payload, outputText: normalizeOutput(payload) };
 }
 
+function jsonFromModelText(text) {
+  const raw = String(text || "").trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start === -1 || end === -1 || end < start) return {};
+  return JSON.parse(raw.slice(start, end + 1));
+}
+
+function normalizeMemoryCandidate(candidate = {}, source = {}) {
+  const confidence = Number(candidate.confidence);
+  const type = String(candidate.type || "").trim().toLowerCase();
+  return {
+    id: randomId(),
+    type: MEMORY_TYPES.has(type) ? type : "recurring_pattern",
+    title: String(candidate.title || "").trim().slice(0, 120),
+    body: String(candidate.body || "").trim(),
+    source: {
+      date: String(source.date || ""),
+      loopPageId: String(source.loopPageId || ""),
+      analysisId: String(source.analysisId || ""),
+    },
+    confidence: Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : 0.5,
+    status: "candidate",
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+}
+
+function parseMemoryCandidates(text, source = {}) {
+  const payload = jsonFromModelText(text);
+  const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+  return candidates
+    .map((candidate) => normalizeMemoryCandidate(candidate, source))
+    .filter((candidate) => candidate.title || candidate.body)
+    .slice(0, 6);
+}
+
 async function callOpenAI({ model, reasoningEffort, input }) {
   const apiKey = requireApiKey();
   const response = await fetch(configuredBaseUrl() + "/responses", {
@@ -232,11 +328,33 @@ async function chat(payload = {}) {
   return { message, messages: nextMessages };
 }
 
+async function extractMemory(payload = {}) {
+  const model = sanitizeModel(payload.model);
+  const reasoningEffort = sanitizeReasoningEffort(payload.reasoningEffort);
+  const source = payload.source || {};
+  const text = await callOpenAI({
+    model,
+    reasoningEffort,
+    input: memoryExtractionInput(payload),
+  });
+  return {
+    id: randomId(),
+    createdAt: nowIso(),
+    model,
+    reasoningEffort,
+    candidates: parseMemoryCandidates(text, source),
+    rawText: text,
+  };
+}
+
 module.exports = {
   analysisInput,
   analyze,
   chat,
   config,
+  extractMemory,
+  memoryExtractionInput,
+  parseMemoryCandidates,
   parseSseResponse,
   pickEntrySummary,
   sanitizeReasoningEffort,

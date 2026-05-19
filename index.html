@@ -125,6 +125,29 @@
           </div>
         </section>
 
+        <section class="memory-panel" aria-labelledby="memoryPanelTitle">
+          <div class="section-title compact-title memory-title-row">
+            <div>
+              <p class="eyebrow">Memory</p>
+              <h2 id="memoryPanelTitle">Keep the system's compounding base.</h2>
+            </div>
+            <div class="memory-actions">
+              <button class="text-button" id="extractMemoryButton" type="button">Extract Memory</button>
+              <span class="memory-status" id="memoryStatus" role="status" aria-live="polite">Memory local</span>
+            </div>
+          </div>
+
+          <div class="memory-candidates">
+            <p class="eyebrow">Candidates</p>
+            <div id="memoryCandidateList" class="memory-candidate-list"></div>
+          </div>
+
+          <div class="memory-bank">
+            <p class="eyebrow">Accepted Memory</p>
+            <div id="memoryList" class="memory-list"></div>
+          </div>
+        </section>
+
         <section class="anchors-panel" aria-labelledby="anchorsTitle">
           <div class="section-title compact-title">
             <p class="eyebrow">Ambition Anchors</p>

@@ -1,7 +1,16 @@
 import { formatShortDate, localDateISO, parseLocalDate } from "./lib/date.js";
-import { createLoopPage, ensureEntry, mergeCore, normalizeTrackerState } from "./state/schema.js";
+import { createLoopPage, ensureEntry, mergeCore, normalizeMemoryItem, normalizeTrackerState } from "./state/schema.js";
 
 const SAVE_DELAY_MS = 700;
+const MEMORY_TYPE_VALUES = [
+  "recurring_pattern",
+  "root_condition",
+  "principle",
+  "mechanism",
+  "open_loop",
+  "experiment",
+  "identity_signal",
+];
 
 function escapeHTML(value) {
   return String(value || "")
@@ -56,6 +65,18 @@ function markdownToHtml(markdown) {
   return html.join("");
 }
 
+function memoryTypeLabel(type) {
+  return String(type || "recurring_pattern")
+    .split("_")
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function clippedText(value, fallback = "No detail yet.") {
+  const text = String(value || "").trim();
+  return text || fallback;
+}
+
 export class MissionTrackerController {
   constructor({ dom, repository }) {
     this.dom = dom;
@@ -71,6 +92,7 @@ export class MissionTrackerController {
     this.previousFocus = null;
     this.cardMotionTimer = null;
     this.isLoopSpread = false;
+    this.memoryCandidates = [];
   }
 
   async init() {
@@ -112,6 +134,7 @@ export class MissionTrackerController {
     this.dom.analyzeButton.addEventListener("click", () => this.analyzeWithAi());
     this.dom.aiChatButton.addEventListener("click", () => this.chatWithAi());
     this.dom.saveAnalysisButton.addEventListener("click", () => this.saveCurrentAnalysis());
+    this.dom.extractMemoryButton.addEventListener("click", () => this.extractMemoryCandidates());
     this.dom.aiOutput.addEventListener("input", () => {
       this.handleManualAnalysisInput();
       this.setSaveStatus("Unsaved", "dirty");
@@ -151,6 +174,21 @@ export class MissionTrackerController {
     });
     this.dom.analysisModal.addEventListener("click", (event) => {
       if (event.target.closest("[data-close-analysis]")) this.closeAnalysisReader();
+    });
+    this.dom.memoryCandidateList.addEventListener("click", (event) => {
+      const accept = event.target.closest("[data-accept-memory]");
+      const reject = event.target.closest("[data-reject-memory]");
+      if (accept) this.acceptMemoryCandidate(accept.dataset.acceptMemory);
+      if (reject) this.rejectMemoryCandidate(reject.dataset.rejectMemory);
+    });
+    this.dom.memoryCandidateList.addEventListener("input", (event) => {
+      const field = event.target.closest("[data-memory-candidate-field]");
+      if (!field) return;
+      this.updateMemoryCandidateField(
+        field.dataset.memoryCandidateId,
+        field.dataset.memoryCandidateField,
+        field.value
+      );
     });
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && !this.dom.analysisModal.hidden) this.closeAnalysisReader();
@@ -235,6 +273,7 @@ export class MissionTrackerController {
     entry.activeLoopPageId = page.id;
     this.syncLegacyPrinciple(entry);
     this.currentAnalysis = null;
+    this.memoryCandidates = [];
     this.markDirty();
     this.render(motion);
   }
@@ -263,6 +302,7 @@ export class MissionTrackerController {
     this.isLoopSpread = false;
     this.syncLegacyPrinciple(entry);
     this.currentAnalysis = null;
+    this.memoryCandidates = [];
     this.markDirty();
     this.render("deal");
   }
@@ -280,6 +320,7 @@ export class MissionTrackerController {
     this.isLoopSpread = false;
     this.syncLegacyPrinciple(entry);
     this.currentAnalysis = null;
+    this.memoryCandidates = [];
     this.markDirty();
     this.render("delete");
   }
@@ -297,6 +338,7 @@ export class MissionTrackerController {
     this.isLoopSpread = false;
     this.syncLegacyPrinciple(entry);
     this.currentAnalysis = null;
+    this.memoryCandidates = [];
     this.markDirty();
     this.render("spread-select");
   }
@@ -370,6 +412,32 @@ export class MissionTrackerController {
     }, {});
   }
 
+  compactMemoryForAi() {
+    const items = Array.isArray(this.state.memory?.items) ? this.state.memory.items : [];
+    return {
+      version: this.state.memory?.version || 1,
+      items: items
+        .filter((item) => String(item.status || "accepted") === "accepted")
+        .slice(0, 24)
+        .map((item) => ({
+          type: item.type,
+          title: item.title,
+          body: item.body,
+          confidence: item.confidence,
+          source: item.source,
+        })),
+    };
+  }
+
+  currentMemorySource() {
+    const page = this.activeLoopPage();
+    return {
+      date: this.selectedDate,
+      loopPageId: page.id,
+      analysisId: this.currentAnalysis?.id || "",
+    };
+  }
+
   async analyzeWithAi() {
     this.syncLegacyPrinciple(this.currentEntry());
     await this.saveNow();
@@ -385,6 +453,7 @@ export class MissionTrackerController {
         reasoningEffort: this.dom.aiEffortSelect.value,
         entry: this.currentEntry(),
         recentEntries: this.recentEntries(),
+        memoryContext: this.compactMemoryForAi(),
         core: this.state.core,
       });
       this.currentAnalysis = {
@@ -420,6 +489,7 @@ export class MissionTrackerController {
         model: this.dom.aiModelInput.value,
         reasoningEffort: this.dom.aiEffortSelect.value,
         entry: this.currentEntry(),
+        memoryContext: this.compactMemoryForAi(),
         analysis: this.currentAnalysis.analysisText,
         messages: this.currentAnalysis.messages || [],
         userMessage,
@@ -451,6 +521,73 @@ export class MissionTrackerController {
     this.setAiStatus("Analysis saved");
   }
 
+  async extractMemoryCandidates() {
+    this.ensureDraftAnalysis();
+    if (this.mergeCurrentAnalysisIntoEntry()) {
+      this.isDirty = true;
+    }
+    await this.saveNow();
+    this.setMemoryStatus("Extracting memory...", "thinking");
+    this.dom.extractMemoryButton.disabled = true;
+
+    try {
+      const result = await this.repository.extractMemory({
+        date: this.selectedDate,
+        model: this.dom.aiModelInput.value,
+        reasoningEffort: this.dom.aiEffortSelect.value,
+        entry: this.currentEntry(),
+        analysis: this.currentAnalysis?.analysisText || this.dom.aiOutput.value,
+        recentEntries: this.recentEntries(),
+        memoryContext: this.compactMemoryForAi(),
+        core: this.state.core,
+        source: this.currentMemorySource(),
+      });
+      this.memoryCandidates = Array.isArray(result.candidates) ? result.candidates : [];
+      this.renderMemoryPanel();
+      this.setMemoryStatus(this.memoryCandidates.length ? "Review candidates" : "No durable memory found");
+    } catch (error) {
+      this.setMemoryStatus(error.status === 400 ? "Missing OPENAI_API_KEY" : "Memory unavailable", "error");
+    } finally {
+      this.dom.extractMemoryButton.disabled = false;
+    }
+  }
+
+  updateMemoryCandidateField(id, field, value) {
+    const candidate = this.memoryCandidates.find((item) => item.id === id);
+    if (!candidate || !["type", "title", "body", "confidence"].includes(field)) return;
+    candidate[field] = field === "confidence" ? Number(value) : value;
+  }
+
+  acceptMemoryCandidate(id) {
+    const candidate = this.memoryCandidates.find((item) => item.id === id);
+    if (!candidate) return;
+    const now = new Date().toISOString();
+    const memoryItem = normalizeMemoryItem({
+      ...candidate,
+      id: "memory-" + Date.now(),
+      source: {
+        ...this.currentMemorySource(),
+        ...(candidate.source || {}),
+      },
+      status: "accepted",
+      createdAt: candidate.createdAt || now,
+      updatedAt: now,
+    });
+    this.state.memory = this.state.memory || { version: 1, items: [] };
+    const existing = Array.isArray(this.state.memory.items) ? this.state.memory.items : [];
+    this.state.memory.items = [memoryItem, ...existing].slice(0, 160);
+    this.memoryCandidates = this.memoryCandidates.filter((item) => item.id !== id);
+    this.setMemoryStatus("Memory accepted");
+    this.markDirty();
+    this.renderMemoryPanel();
+  }
+
+  rejectMemoryCandidate(id) {
+    this.memoryCandidates = this.memoryCandidates.filter((item) => item.id !== id);
+    this.setMemoryStatus("Candidate rejected");
+    this.renderMemoryPanel();
+  }
+
   mergeCurrentAnalysisIntoEntry() {
     this.ensureDraftAnalysis();
     if (!this.currentAnalysis) return false;
@@ -478,6 +615,7 @@ export class MissionTrackerController {
     await this.saveNow();
     this.selectedDate = date;
     this.currentAnalysis = null;
+    this.memoryCandidates = [];
     ensureEntry(this.state.entries, this.selectedDate);
     this.dom.datePicker.value = this.selectedDate;
     this.render();
@@ -509,6 +647,7 @@ export class MissionTrackerController {
     this.renderLoopSpread(entry);
     this.renderCardMotion(motion);
     this.renderAnalysisList();
+    this.renderMemoryPanel();
     if (!this.currentAnalysis) {
       this.dom.aiOutput.value = "";
     }
@@ -619,6 +758,71 @@ export class MissionTrackerController {
     }).join("");
   }
 
+  renderMemoryPanel() {
+    this.renderMemoryCandidates();
+    this.renderAcceptedMemory();
+  }
+
+  renderMemoryCandidates() {
+    if (!this.memoryCandidates.length) {
+      this.dom.memoryCandidateList.innerHTML = '<p class="muted-copy">No memory candidates waiting for review.</p>';
+      return;
+    }
+    this.dom.memoryCandidateList.innerHTML = this.memoryCandidates.map((candidate) => {
+      const typeOptions = MEMORY_TYPE_VALUES.map((type) => {
+        const selected = type === candidate.type ? " selected" : "";
+        return '<option value="' + escapeHTML(type) + '"' + selected + '>' + escapeHTML(memoryTypeLabel(type)) + '</option>';
+      }).join("");
+      const confidence = Math.round((Number(candidate.confidence) || 0.5) * 100);
+      return [
+        '<article class="memory-candidate-card">',
+        '<div class="memory-candidate-head">',
+        '<label>',
+        '<span>Type</span>',
+        '<select data-memory-candidate-id="' + escapeHTML(candidate.id) + '" data-memory-candidate-field="type">',
+        typeOptions,
+        '</select>',
+        '</label>',
+        '<span class="memory-confidence">' + String(confidence) + '%</span>',
+        '</div>',
+        '<label>',
+        '<span>Title</span>',
+        '<input value="' + escapeHTML(candidate.title) + '" data-memory-candidate-id="' + escapeHTML(candidate.id) + '" data-memory-candidate-field="title">',
+        '</label>',
+        '<label>',
+        '<span>Memory</span>',
+        '<textarea rows="4" data-memory-candidate-id="' + escapeHTML(candidate.id) + '" data-memory-candidate-field="body">' + escapeHTML(candidate.body) + '</textarea>',
+        '</label>',
+        '<div class="memory-card-actions">',
+        '<button class="text-button memory-accept-button" type="button" data-accept-memory="' + escapeHTML(candidate.id) + '">Accept</button>',
+        '<button class="text-button memory-reject-button" type="button" data-reject-memory="' + escapeHTML(candidate.id) + '">Reject</button>',
+        '</div>',
+        '</article>',
+      ].join("");
+    }).join("");
+  }
+
+  renderAcceptedMemory() {
+    const items = (this.state.memory?.items || []).filter((item) => String(item.status || "accepted") === "accepted");
+    if (!items.length) {
+      this.dom.memoryList.innerHTML = '<p class="muted-copy">No accepted memory yet. Extract memory after a useful card or analysis.</p>';
+      return;
+    }
+    this.dom.memoryList.innerHTML = items.slice(0, 24).map((item) => {
+      const sourceDate = item.source?.date ? "Source " + item.source.date : "Local memory";
+      return [
+        '<article class="memory-card">',
+        '<div class="memory-card-top">',
+        '<span class="memory-type">' + escapeHTML(memoryTypeLabel(item.type)) + '</span>',
+        '<span>' + escapeHTML(sourceDate) + '</span>',
+        '</div>',
+        '<h3>' + escapeHTML(clippedText(item.title, "Untitled memory")) + '</h3>',
+        '<p>' + escapeHTML(clippedText(item.body)) + '</p>',
+        '</article>',
+      ].join("");
+    }).join("");
+  }
+
   openAnalysisReader(id) {
     const analyses = this.currentEntry().aiAnalyses || [];
     const analysis = analyses.find((item) => item.id === id);
@@ -666,5 +870,10 @@ export class MissionTrackerController {
   setAiStatus(message, state = "ready") {
     this.dom.aiStatus.textContent = message;
     this.dom.aiStatus.className = ("ai-status " + (state === "ready" ? "" : state)).trim();
+  }
+
+  setMemoryStatus(message, state = "ready") {
+    this.dom.memoryStatus.textContent = message;
+    this.dom.memoryStatus.className = ("memory-status " + (state === "ready" ? "" : state)).trim();
   }
 }

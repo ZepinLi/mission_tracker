@@ -39,5 +39,9 @@ export function getDom() {
     analysisModalTitle: document.getElementById("analysisModalTitle"),
     analysisModalMeta: document.getElementById("analysisModalMeta"),
     analysisModalBody: document.getElementById("analysisModalBody"),
+    extractMemoryButton: document.getElementById("extractMemoryButton"),
+    memoryStatus: document.getElementById("memoryStatus"),
+    memoryCandidateList: document.getElementById("memoryCandidateList"),
+    memoryList: document.getElementById("memoryList"),
   };
 }

@@ -29,6 +29,7 @@ A single date can hold multiple Daily Loop cards. Use `Add page` to create anoth
 - Autosave to the local Node server.
 - Floating manual save island for deliberate `save everything now`.
 - AI Dynamics panel for analysis, follow-up conversation, and saved conclusions.
+- Human-approved Memory layer for durable patterns, principles, mechanisms, and experiments.
 - Saved analysis reader with a large, readable modal view.
 
 ## Local Usage
@@ -91,6 +92,8 @@ Personal tracker data is stored locally:
 ```text
 data/personal-tracker.json
 ```
+
+Daily records, saved analyses, and accepted memory all live in this local file.
 
 Local data files and `.env` should stay out of git. The app is designed for personal local use first; do not expose it directly to the public internet without adding production-grade authentication, HTTPS, backups, and operational controls.
 

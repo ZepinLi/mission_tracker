@@ -292,11 +292,64 @@ test("AI dynamics prompt payload excludes API key", () => {
         },
       },
       recentEntries: {},
+      memoryContext: {
+        items: [
+          {
+            type: "root_condition",
+            title: "Input pressure",
+            body: "Open inbox before planning repeatedly displaces deep work.",
+            status: "accepted",
+          },
+        ],
+      },
       core: { mission: "Test mission" },
     });
 
     assert.match(JSON.stringify(payload), /Repeated context switching/);
+    assert.match(JSON.stringify(payload), /Input pressure/);
     assert.doesNotMatch(JSON.stringify(payload), /test-secret-key/);
+  } finally {
+    if (previousKey == null) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  }
+});
+
+test("AI dynamics memory extraction prompt includes source and existing memory", async () => {
+  const previousKey = process.env.OPENAI_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+
+  try {
+    const payload = aiDynamics.memoryExtractionInput({
+      date: "2099-01-10",
+      entry: {
+        principle: {
+          pattern: "Skipped a user call.",
+          rootCondition: "Research task felt safer than reality contact.",
+          principle: "Reality contact comes before internal refinement.",
+          mechanism: "Book the call before opening the paper queue.",
+        },
+      },
+      analysis: "The system drifts toward safer internal work unless reality contact is scheduled.",
+      source: { date: "2099-01-10", loopPageId: "loop-page-2", analysisId: "analysis-2" },
+      memoryContext: {
+        items: [
+          {
+            type: "recurring_pattern",
+            title: "Safety drift",
+            body: "Abstract work can become avoidance when no external contact is scheduled.",
+            status: "accepted",
+          },
+        ],
+      },
+    });
+
+    const promptText = JSON.stringify(payload);
+    assert.match(promptText, /loop-page-2/);
+    assert.match(promptText, /Safety drift/);
+    await assert.rejects(
+      () => aiDynamics.extractMemory({ date: "2099-01-10", entry: {}, model: "gpt-5.2" }),
+      /Missing OPENAI_API_KEY/
+    );
   } finally {
     if (previousKey == null) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = previousKey;
@@ -336,6 +389,45 @@ test("personal tracker preserves saved AI analyses", () => {
 
     assert.equal(saved.entries[date].aiAnalyses[0].id, "analysis-1");
     assert.equal(personalTracker.loadTracker().entries[date].aiAnalyses[0].model, "gpt-5.2");
+  } finally {
+    if (previousState == null) {
+      fs.rmSync(personalTracker.STATE_FILE, { force: true });
+    } else {
+      fs.writeFileSync(personalTracker.STATE_FILE, previousState);
+    }
+  }
+});
+
+test("personal tracker normalizes and persists accepted memory", () => {
+  const previousState = fs.existsSync(personalTracker.STATE_FILE)
+    ? fs.readFileSync(personalTracker.STATE_FILE, "utf8")
+    : null;
+
+  try {
+    const withoutMemory = personalTracker.saveTracker({ entries: {} });
+    assert.deepEqual(withoutMemory.memory.items, []);
+
+    const saved = personalTracker.saveTracker({
+      ...withoutMemory,
+      memory: {
+        items: [
+          {
+            id: "memory-1",
+            type: "principle",
+            title: "Protect reality contact",
+            body: "When work becomes abstract, create one reality-facing interaction before optimizing.",
+            source: { date: "2099-01-09", loopPageId: "loop-page-1", analysisId: "analysis-1" },
+            confidence: 0.82,
+            status: "accepted",
+          },
+        ],
+      },
+    });
+
+    assert.equal(saved.memory.version, 1);
+    assert.equal(saved.memory.items[0].id, "memory-1");
+    assert.equal(saved.memory.items[0].source.date, "2099-01-09");
+    assert.equal(personalTracker.loadTracker().memory.items[0].title, "Protect reality contact");
   } finally {
     if (previousState == null) {
       fs.rmSync(personalTracker.STATE_FILE, { force: true });

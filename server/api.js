@@ -91,6 +91,12 @@ async function handleAi(req, res, parts) {
     return;
   }
 
+  if (req.method === "POST" && parts[2] === "extract-memory") {
+    const payload = await readJson(req);
+    sendJson(res, 200, await aiDynamics.extractMemory(payload));
+    return;
+  }
+
   notFound(res);
 }
 

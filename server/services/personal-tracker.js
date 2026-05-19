@@ -8,6 +8,15 @@ const STATE_FILE = path.join(DATA_DIR, "personal-tracker.json");
 const LEGACY_STATE_FILE = path.join(DATA_DIR, "mission-tracker-state.json");
 const LEGACY_CORE_FILE = path.join(DATA_DIR, "core.json");
 const LEGACY_WEEKS_DIR = path.join(DATA_DIR, "weeks");
+const MEMORY_TYPES = [
+  "recurring_pattern",
+  "root_condition",
+  "principle",
+  "mechanism",
+  "open_loop",
+  "experiment",
+  "identity_signal",
+];
 
 const defaultCore = {
   version: 2,
@@ -95,6 +104,43 @@ function emptyEntry() {
   };
 }
 
+function normalizeMemoryType(type) {
+  const value = String(type || "").trim().toLowerCase();
+  return MEMORY_TYPES.includes(value) ? value : "recurring_pattern";
+}
+
+function normalizeMemorySource(source = {}) {
+  return {
+    date: String(source?.date || ""),
+    loopPageId: String(source?.loopPageId || ""),
+    analysisId: String(source?.analysisId || ""),
+  };
+}
+
+function normalizeMemoryItem(item = {}) {
+  const confidence = Number(item.confidence);
+  return {
+    id: String(item.id || "memory-" + Date.now()),
+    type: normalizeMemoryType(item.type),
+    title: String(item.title || ""),
+    body: String(item.body || ""),
+    source: normalizeMemorySource(item.source),
+    confidence: Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : 0.5,
+    status: String(item.status || "accepted"),
+    createdAt: String(item.createdAt || ""),
+    updatedAt: String(item.updatedAt || ""),
+  };
+}
+
+function normalizeMemory(memory = {}) {
+  return {
+    version: 1,
+    items: Array.isArray(memory.items)
+      ? memory.items.map(normalizeMemoryItem).filter((item) => item.title.trim() || item.body.trim())
+      : [],
+  };
+}
+
 function normalizeEntry(entry = {}) {
   const loopPages = normalizeLoopPages(entry);
   const requestedActiveId = String(entry.activeLoopPageId || "");
@@ -137,6 +183,7 @@ function normalizeState(payload = {}) {
       ...(payload.core && typeof payload.core === "object" ? payload.core : {}),
     },
     entries,
+    memory: normalizeMemory(payload.memory),
     systemLog: Array.isArray(payload.systemLog) ? payload.systemLog : [],
     createdAt: payload.createdAt || new Date().toISOString(),
     updatedAt: payload.updatedAt || new Date().toISOString(),

@@ -3,6 +3,17 @@ import { average, clampNumber, clone } from "../lib/utils.js";
 
 export const CORE_VERSION = 2;
 export const ENTRY_VERSION = 2;
+export const MEMORY_VERSION = 1;
+
+export const MEMORY_TYPES = [
+  "recurring_pattern",
+  "root_condition",
+  "principle",
+  "mechanism",
+  "open_loop",
+  "experiment",
+  "identity_signal",
+];
 
 export const defaultCore = {
   version: CORE_VERSION,
@@ -146,6 +157,43 @@ export function createEmptyEntry() {
   };
 }
 
+export function normalizeMemoryType(type) {
+  const value = String(type || "").trim().toLowerCase();
+  return MEMORY_TYPES.includes(value) ? value : "recurring_pattern";
+}
+
+export function normalizeMemorySource(source = {}) {
+  return {
+    date: String(source?.date || ""),
+    loopPageId: String(source?.loopPageId || ""),
+    analysisId: String(source?.analysisId || ""),
+  };
+}
+
+export function normalizeMemoryItem(item = {}) {
+  const confidence = Number(item.confidence);
+  return {
+    id: String(item.id || "memory-" + Date.now()),
+    type: normalizeMemoryType(item.type),
+    title: String(item.title || ""),
+    body: String(item.body || ""),
+    source: normalizeMemorySource(item.source),
+    confidence: Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : 0.5,
+    status: String(item.status || "accepted"),
+    createdAt: String(item.createdAt || ""),
+    updatedAt: String(item.updatedAt || ""),
+  };
+}
+
+export function normalizeMemory(memory = {}) {
+  return {
+    version: MEMORY_VERSION,
+    items: Array.isArray(memory.items)
+      ? memory.items.map(normalizeMemoryItem).filter((item) => item.title.trim() || item.body.trim())
+      : [],
+  };
+}
+
 export function mergeCore(savedCore) {
   if (!savedCore || typeof savedCore !== "object") {
     return clone(defaultCore);
@@ -220,6 +268,7 @@ export function normalizeTrackerState(payload = {}) {
   return {
     core: mergeCore(payload.core),
     entries: normalizeEntries(payload.entries),
+    memory: normalizeMemory(payload.memory),
     systemLog: Array.isArray(payload.systemLog) ? payload.systemLog : [],
     createdAt: payload.createdAt || new Date().toISOString(),
   };
