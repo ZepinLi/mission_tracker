@@ -1,5 +1,6 @@
 import { isoWeekInfo, lastNDates, localDateISO, parseLocalDate } from "../lib/date.js";
 import { average, clampNumber, clone } from "../lib/utils.js";
+import { normalizeMemoryEdges } from "../memory/graph.js";
 
 export const CORE_VERSION = 2;
 export const ENTRY_VERSION = 2;
@@ -191,6 +192,7 @@ export function normalizeMemory(memory = {}) {
     items: Array.isArray(memory.items)
       ? memory.items.map(normalizeMemoryItem).filter((item) => item.title.trim() || item.body.trim())
       : [],
+    edges: normalizeMemoryEdges(memory.edges),
   };
 }
 

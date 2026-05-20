@@ -406,6 +406,7 @@ test("personal tracker normalizes and persists accepted memory", () => {
   try {
     const withoutMemory = personalTracker.saveTracker({ entries: {} });
     assert.deepEqual(withoutMemory.memory.items, []);
+    assert.deepEqual(withoutMemory.memory.edges, []);
 
     const saved = personalTracker.saveTracker({
       ...withoutMemory,
@@ -420,14 +421,96 @@ test("personal tracker normalizes and persists accepted memory", () => {
             confidence: 0.82,
             status: "accepted",
           },
+          {
+            id: "memory-2",
+            type: "mechanism",
+            title: "Schedule the external contact",
+            body: "Book a concrete outside conversation before expanding internal research.",
+            source: { date: "2099-01-09", loopPageId: "loop-page-1", analysisId: "analysis-1" },
+            confidence: 0.76,
+            status: "accepted",
+          },
+        ],
+        edges: [
+          {
+            id: "edge-1",
+            from: "memory-1",
+            to: "memory-2",
+            type: "reinforces",
+            weight: 0.72,
+            source: "deterministic",
+          },
         ],
       },
     });
 
     assert.equal(saved.memory.version, 1);
     assert.equal(saved.memory.items[0].id, "memory-1");
+    assert.equal(saved.memory.edges[0].type, "reinforces");
     assert.equal(saved.memory.items[0].source.date, "2099-01-09");
     assert.equal(personalTracker.loadTracker().memory.items[0].title, "Protect reality contact");
+    assert.equal(personalTracker.loadTracker().memory.edges[0].from, "memory-1");
+  } finally {
+    if (previousState == null) {
+      fs.rmSync(personalTracker.STATE_FILE, { force: true });
+    } else {
+      fs.writeFileSync(personalTracker.STATE_FILE, previousState);
+    }
+  }
+});
+
+test("personal tracker keeps memory after source loop card changes", () => {
+  const previousState = fs.existsSync(personalTracker.STATE_FILE)
+    ? fs.readFileSync(personalTracker.STATE_FILE, "utf8")
+    : null;
+
+  try {
+    const date = "2099-01-11";
+    const saved = personalTracker.saveTracker({
+      entries: {
+        [date]: {
+          activeLoopPageId: "loop-page-1",
+          loopPages: [
+            {
+              id: "loop-page-1",
+              principle: { pattern: "Source signal.", principle: "Source principle." },
+            },
+          ],
+        },
+      },
+      memory: {
+        items: [
+          {
+            id: "memory-source",
+            type: "root_condition",
+            title: "Source-backed memory",
+            body: "Memory should remain historical even if the source card changes.",
+            source: { date, loopPageId: "loop-page-1" },
+            status: "accepted",
+          },
+        ],
+        edges: [],
+      },
+    });
+
+    const changed = personalTracker.saveTracker({
+      ...saved,
+      entries: {
+        [date]: {
+          activeLoopPageId: "loop-page-2",
+          loopPages: [
+            {
+              id: "loop-page-2",
+              principle: { pattern: "Replacement signal.", principle: "Replacement principle." },
+            },
+          ],
+        },
+      },
+    });
+
+    assert.equal(changed.entries[date].activeLoopPageId, "loop-page-2");
+    assert.equal(changed.memory.items[0].id, "memory-source");
+    assert.equal(changed.memory.items[0].source.loopPageId, "loop-page-1");
   } finally {
     if (previousState == null) {
       fs.rmSync(personalTracker.STATE_FILE, { force: true });

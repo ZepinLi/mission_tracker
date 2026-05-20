@@ -25,12 +25,14 @@ A single date can hold multiple Daily Loop cards. Use `Add page` to create anoth
 
 - Local daily journal for `不贰过`.
 - Multi-card Daily Loop per date, with numbered card badges.
+- Resizable Daily Loop writing fields on desktop.
 - Ambition anchors for `Entrepreneur`, `RL Research`, and `Family`.
 - Autosave to the local Node server.
 - Floating manual save island for deliberate `save everything now`.
-- AI Dynamics panel for analysis, follow-up conversation, and saved conclusions.
-- Human-approved Memory layer for durable patterns, principles, mechanisms, and experiments.
-- Saved analysis reader with a large, readable modal view.
+- AI Dynamics panel for analysis, follow-up conversation, saved conclusions, and memory candidates.
+- Saved analysis stack with spread review and a readable Markdown reader.
+- Human-approved Memory layer for durable patterns, principles, mechanisms, experiments, and graph relations.
+- Local Memory Graph for browsing accepted memories across the current date or all history.
 
 ## Local Usage
 
@@ -93,7 +95,7 @@ Personal tracker data is stored locally:
 data/personal-tracker.json
 ```
 
-Daily records, saved analyses, and accepted memory all live in this local file.
+Daily records, saved analyses, accepted memory, and memory graph relations all live in this local file.
 
 Local data files and `.env` should stay out of git. The app is designed for personal local use first; do not expose it directly to the public internet without adding production-grade authentication, HTTPS, backups, and operational controls.
 

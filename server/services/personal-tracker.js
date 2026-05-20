@@ -17,6 +17,14 @@ const MEMORY_TYPES = [
   "experiment",
   "identity_signal",
 ];
+const MEMORY_EDGE_TYPES = [
+  "causes",
+  "prevents",
+  "reinforces",
+  "evolves_from",
+  "same_context",
+  "supports_goal",
+];
 
 const defaultCore = {
   version: 2,
@@ -132,12 +140,39 @@ function normalizeMemoryItem(item = {}) {
   };
 }
 
+function normalizeMemoryEdge(edge = {}) {
+  const type = String(edge.type || "");
+  const weight = Number(edge.weight);
+  return {
+    id: String(edge.id || [edge.from, edge.to, type || "same_context"].filter(Boolean).join("-")),
+    from: String(edge.from || ""),
+    to: String(edge.to || ""),
+    type: MEMORY_EDGE_TYPES.includes(type) ? type : "same_context",
+    weight: Number.isFinite(weight) ? Math.min(1, Math.max(0.1, weight)) : 0.5,
+    source: String(edge.source || "deterministic"),
+  };
+}
+
+function normalizeMemoryEdges(edges = []) {
+  const seen = new Set();
+  return (Array.isArray(edges) ? edges : [])
+    .map(normalizeMemoryEdge)
+    .filter((edge) => edge.from && edge.to && edge.from !== edge.to)
+    .filter((edge) => {
+      const key = [edge.from, edge.to, edge.type].join(":");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
 function normalizeMemory(memory = {}) {
   return {
     version: 1,
     items: Array.isArray(memory.items)
       ? memory.items.map(normalizeMemoryItem).filter((item) => item.title.trim() || item.body.trim())
       : [],
+    edges: normalizeMemoryEdges(memory.edges),
   };
 }
 

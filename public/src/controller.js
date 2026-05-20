@@ -1,5 +1,7 @@
 import { formatShortDate, localDateISO, parseLocalDate } from "./lib/date.js";
+import { buildMemoryGraph, buildDeterministicEdges, memoryTypeLabel, normalizeMemoryEdges } from "./memory/graph.js";
 import { createLoopPage, ensureEntry, mergeCore, normalizeMemoryItem, normalizeTrackerState } from "./state/schema.js";
+import { escapeHTML, markdownToHtml, markdownToPlainText } from "./ui/markdown.js";
 
 const SAVE_DELAY_MS = 700;
 const MEMORY_TYPE_VALUES = [
@@ -11,66 +13,6 @@ const MEMORY_TYPE_VALUES = [
   "experiment",
   "identity_signal",
 ];
-
-function escapeHTML(value) {
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-function formatInlineMarkdown(value) {
-  return escapeHTML(value).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-}
-
-function markdownToHtml(markdown) {
-  const lines = String(markdown || "").split(/\r?\n/);
-  const html = [];
-  let listOpen = false;
-
-  function closeList() {
-    if (listOpen) {
-      html.push("</ul>");
-      listOpen = false;
-    }
-  }
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      closeList();
-      continue;
-    }
-    const heading = trimmed.match(/^#{1,3}\s+(.+)$/);
-    if (heading) {
-      closeList();
-      html.push("<h3>" + formatInlineMarkdown(heading[1]) + "</h3>");
-      continue;
-    }
-    const bullet = trimmed.match(/^[-*]\s+(.+)$/);
-    if (bullet) {
-      if (!listOpen) {
-        html.push("<ul>");
-        listOpen = true;
-      }
-      html.push("<li>" + formatInlineMarkdown(bullet[1]) + "</li>");
-      continue;
-    }
-    closeList();
-    html.push("<p>" + formatInlineMarkdown(trimmed) + "</p>");
-  }
-  closeList();
-  return html.join("");
-}
-
-function memoryTypeLabel(type) {
-  return String(type || "recurring_pattern")
-    .split("_")
-    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
-    .join(" ");
-}
 
 function clippedText(value, fallback = "No detail yet.") {
   const text = String(value || "").trim();
@@ -92,7 +34,18 @@ export class MissionTrackerController {
     this.previousFocus = null;
     this.cardMotionTimer = null;
     this.isLoopSpread = false;
+    this.isAnalysisSpread = false;
+    this.activeAnalysisId = "";
+    this.readerAnalysisId = "";
     this.memoryCandidates = [];
+    this.memoryView = "cards";
+    this.graphScope = "current";
+    this.graphType = "all";
+    this.selectedMemoryId = "";
+    this.graphViewBox = { x: 0, y: 0, width: 840, height: 520 };
+    this.draggedMemoryId = "";
+    this.graphPanStart = null;
+    this.memoryNodePositions = new Map();
   }
 
   async init() {
@@ -135,6 +88,7 @@ export class MissionTrackerController {
     this.dom.aiChatButton.addEventListener("click", () => this.chatWithAi());
     this.dom.saveAnalysisButton.addEventListener("click", () => this.saveCurrentAnalysis());
     this.dom.extractMemoryButton.addEventListener("click", () => this.extractMemoryCandidates());
+    this.dom.toggleAnalysisSpread.addEventListener("click", () => this.toggleAnalysisSpread());
     this.dom.aiOutput.addEventListener("input", () => {
       this.handleManualAnalysisInput();
       this.setSaveStatus("Unsaved", "dirty");
@@ -162,6 +116,23 @@ export class MissionTrackerController {
       this.toggleLoopSpread(false);
     });
     this.dom.analysisList.addEventListener("click", (event) => {
+      if (event.target.closest("[data-analysis-prev]")) {
+        this.shiftActiveAnalysis(-1);
+        return;
+      }
+      if (event.target.closest("[data-analysis-next]")) {
+        this.shiftActiveAnalysis(1);
+        return;
+      }
+      if (event.target.closest("[data-toggle-analysis-spread]")) {
+        this.toggleAnalysisSpread();
+        return;
+      }
+      const select = event.target.closest("[data-select-analysis]");
+      if (select) {
+        this.setActiveAnalysis(select.dataset.selectAnalysis, true);
+        return;
+      }
       const trigger = event.target.closest("[data-open-analysis]");
       if (trigger) this.openAnalysisReader(trigger.dataset.openAnalysis);
     });
@@ -175,6 +146,12 @@ export class MissionTrackerController {
     this.dom.analysisModal.addEventListener("click", (event) => {
       if (event.target.closest("[data-close-analysis]")) this.closeAnalysisReader();
     });
+    this.dom.analysisReaderNav.addEventListener("click", (event) => {
+      const trigger = event.target.closest("[data-reader-analysis]");
+      if (trigger) this.openAnalysisReader(trigger.dataset.readerAnalysis);
+    });
+    this.dom.previousAnalysisReader.addEventListener("click", () => this.shiftAnalysisReader(-1));
+    this.dom.nextAnalysisReader.addEventListener("click", () => this.shiftAnalysisReader(1));
     this.dom.memoryCandidateList.addEventListener("click", (event) => {
       const accept = event.target.closest("[data-accept-memory]");
       const reject = event.target.closest("[data-reject-memory]");
@@ -190,6 +167,27 @@ export class MissionTrackerController {
         field.value
       );
     });
+    this.dom.memoryCardsView.addEventListener("click", () => this.setMemoryView("cards"));
+    this.dom.memoryGraphView.addEventListener("click", () => this.setMemoryView("graph"));
+    this.dom.memoryScopeSelect.addEventListener("change", (event) => {
+      this.graphScope = event.target.value;
+      this.selectedMemoryId = "";
+      this.renderMemoryPanel();
+    });
+    this.dom.memoryTypeFilter.addEventListener("change", (event) => {
+      this.graphType = event.target.value;
+      this.selectedMemoryId = "";
+      this.renderMemoryPanel();
+    });
+    this.dom.memoryGraphSvg.addEventListener("click", (event) => {
+      const node = event.target.closest("[data-memory-node]");
+      if (node) this.selectMemoryNode(node.dataset.memoryNode);
+    });
+    this.dom.memoryGraphSvg.addEventListener("pointerdown", (event) => this.handleGraphPointerDown(event));
+    this.dom.memoryGraphSvg.addEventListener("pointermove", (event) => this.handleGraphPointerMove(event));
+    this.dom.memoryGraphSvg.addEventListener("pointerup", () => this.stopGraphDrag());
+    this.dom.memoryGraphSvg.addEventListener("pointerleave", () => this.stopGraphDrag());
+    this.dom.memoryGraphSvg.addEventListener("wheel", (event) => this.zoomGraph(event), { passive: false });
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && !this.dom.analysisModal.hidden) this.closeAnalysisReader();
     });
@@ -273,6 +271,7 @@ export class MissionTrackerController {
     entry.activeLoopPageId = page.id;
     this.syncLegacyPrinciple(entry);
     this.currentAnalysis = null;
+    this.activeAnalysisId = "";
     this.memoryCandidates = [];
     this.markDirty();
     this.render(motion);
@@ -302,6 +301,7 @@ export class MissionTrackerController {
     this.isLoopSpread = false;
     this.syncLegacyPrinciple(entry);
     this.currentAnalysis = null;
+    this.activeAnalysisId = "";
     this.memoryCandidates = [];
     this.markDirty();
     this.render("deal");
@@ -320,6 +320,7 @@ export class MissionTrackerController {
     this.isLoopSpread = false;
     this.syncLegacyPrinciple(entry);
     this.currentAnalysis = null;
+    this.activeAnalysisId = "";
     this.memoryCandidates = [];
     this.markDirty();
     this.render("delete");
@@ -338,6 +339,7 @@ export class MissionTrackerController {
     this.isLoopSpread = false;
     this.syncLegacyPrinciple(entry);
     this.currentAnalysis = null;
+    this.activeAnalysisId = "";
     this.memoryCandidates = [];
     this.markDirty();
     this.render("spread-select");
@@ -382,6 +384,7 @@ export class MissionTrackerController {
     this.setSaveStatus("Saving...", "saving");
 
     this.syncLegacyPrinciple(this.currentEntry());
+    if (this.state.memory?.items?.length) this.refreshMemoryEdges();
 
     try {
       const saved = await this.repository.saveTracker({
@@ -468,6 +471,7 @@ export class MissionTrackerController {
       this.renderAiOutput();
       this.setAiStatus("Analysis ready");
       this.dom.saveAnalysisButton.disabled = false;
+      await this.extractMemoryCandidates({ auto: true, mergeAnalysis: false });
     } catch (error) {
       this.renderAiError(error.message || "AI unavailable");
       this.setAiStatus(error.status === 400 ? "Missing OPENAI_API_KEY" : "AI unavailable", "error");
@@ -519,14 +523,17 @@ export class MissionTrackerController {
     await this.saveNow();
     this.renderAnalysisList();
     this.setAiStatus("Analysis saved");
+    await this.extractMemoryCandidates({ auto: true, mergeAnalysis: false });
   }
 
-  async extractMemoryCandidates() {
+  async extractMemoryCandidates(options = {}) {
+    const auto = Boolean(options.auto);
+    const mergeAnalysis = options.mergeAnalysis !== false;
     this.ensureDraftAnalysis();
-    if (this.mergeCurrentAnalysisIntoEntry()) {
+    if (mergeAnalysis && this.mergeCurrentAnalysisIntoEntry()) {
       this.isDirty = true;
     }
-    await this.saveNow();
+    if (!auto) await this.saveNow();
     this.setMemoryStatus("Extracting memory...", "thinking");
     this.dom.extractMemoryButton.disabled = true;
 
@@ -542,14 +549,29 @@ export class MissionTrackerController {
         core: this.state.core,
         source: this.currentMemorySource(),
       });
-      this.memoryCandidates = Array.isArray(result.candidates) ? result.candidates : [];
+      this.mergeMemoryCandidates(Array.isArray(result.candidates) ? result.candidates : []);
       this.renderMemoryPanel();
       this.setMemoryStatus(this.memoryCandidates.length ? "Review candidates" : "No durable memory found");
     } catch (error) {
-      this.setMemoryStatus(error.status === 400 ? "Missing OPENAI_API_KEY" : "Memory unavailable", "error");
+      this.setMemoryStatus(
+        error.status === 400 ? "Missing OPENAI_API_KEY" : auto ? "Memory extraction skipped" : "Memory unavailable",
+        "error"
+      );
     } finally {
       this.dom.extractMemoryButton.disabled = false;
     }
+  }
+
+  mergeMemoryCandidates(candidates = []) {
+    const seen = new Set(this.memoryCandidates.map((item) => [item.type, item.title, item.body].join("::")));
+    const next = [];
+    for (const candidate of candidates) {
+      const key = [candidate.type, candidate.title, candidate.body].join("::");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      next.push(candidate);
+    }
+    this.memoryCandidates = [...next, ...this.memoryCandidates].slice(0, 12);
   }
 
   updateMemoryCandidateField(id, field, value) {
@@ -576,6 +598,7 @@ export class MissionTrackerController {
     this.state.memory = this.state.memory || { version: 1, items: [] };
     const existing = Array.isArray(this.state.memory.items) ? this.state.memory.items : [];
     this.state.memory.items = [memoryItem, ...existing].slice(0, 160);
+    this.refreshMemoryEdges();
     this.memoryCandidates = this.memoryCandidates.filter((item) => item.id !== id);
     this.setMemoryStatus("Memory accepted");
     this.markDirty();
@@ -586,6 +609,15 @@ export class MissionTrackerController {
     this.memoryCandidates = this.memoryCandidates.filter((item) => item.id !== id);
     this.setMemoryStatus("Candidate rejected");
     this.renderMemoryPanel();
+  }
+
+  refreshMemoryEdges() {
+    this.state.memory = this.state.memory || { version: 1, items: [], edges: [] };
+    const manualEdges = (this.state.memory.edges || []).filter((edge) => edge.source !== "deterministic");
+    this.state.memory.edges = normalizeMemoryEdges([
+      ...manualEdges,
+      ...buildDeterministicEdges(this.state.memory.items || []),
+    ]);
   }
 
   mergeCurrentAnalysisIntoEntry() {
@@ -615,6 +647,8 @@ export class MissionTrackerController {
     await this.saveNow();
     this.selectedDate = date;
     this.currentAnalysis = null;
+    this.activeAnalysisId = "";
+    this.readerAnalysisId = "";
     this.memoryCandidates = [];
     ensureEntry(this.state.entries, this.selectedDate);
     this.dom.datePicker.value = this.selectedDate;
@@ -733,34 +767,122 @@ export class MissionTrackerController {
     this.handleManualAnalysisInput();
   }
 
+  currentAnalyses() {
+    return this.currentEntry().aiAnalyses || [];
+  }
+
+  activeAnalysis() {
+    const analyses = this.currentAnalyses();
+    if (!analyses.length) return null;
+    const found = analyses.find((analysis) => analysis.id === this.activeAnalysisId);
+    if (found) return found;
+    this.activeAnalysisId = analyses[0].id;
+    return analyses[0];
+  }
+
+  activeAnalysisIndex() {
+    const analyses = this.currentAnalyses();
+    const active = this.activeAnalysis();
+    return Math.max(0, analyses.findIndex((analysis) => analysis.id === active?.id));
+  }
+
+  setActiveAnalysis(id, collapse = false) {
+    const analyses = this.currentAnalyses();
+    if (!analyses.some((analysis) => analysis.id === id)) return;
+    this.activeAnalysisId = id;
+    if (collapse) this.isAnalysisSpread = false;
+    this.renderAnalysisList();
+  }
+
+  shiftActiveAnalysis(delta) {
+    const analyses = this.currentAnalyses();
+    if (analyses.length < 2) return;
+    const nextIndex = (this.activeAnalysisIndex() + delta + analyses.length) % analyses.length;
+    this.setActiveAnalysis(analyses[nextIndex].id);
+  }
+
+  toggleAnalysisSpread(force) {
+    const analyses = this.currentAnalyses();
+    if (analyses.length < 2) return;
+    this.isAnalysisSpread = typeof force === "boolean" ? force : !this.isAnalysisSpread;
+    this.renderAnalysisList();
+  }
+
+  analysisPreview(analysis) {
+    return markdownToPlainText(analysis.analysisText || "No analysis text saved.");
+  }
+
   renderAnalysisList() {
-    const analyses = this.currentEntry().aiAnalyses || [];
+    const analyses = this.currentAnalyses();
     if (!analyses.length) {
+      this.dom.toggleAnalysisSpread.disabled = true;
       this.dom.analysisList.innerHTML = '<p class="muted-copy">No saved AI analyses for this date.</p>';
       return;
     }
-    this.dom.analysisList.innerHTML = analyses.map((analysis) => {
-      const created = analysis.createdAt ? new Date(analysis.createdAt).toLocaleString() : "Saved analysis";
-      const text = String(analysis.analysisText || "").trim();
-      const preview = text || "No analysis text saved.";
-      return [
-        '<article class="analysis-card" data-open-analysis="' + escapeHTML(analysis.id) + '" tabindex="0" role="button">',
-        '<div class="analysis-card-header">',
-        '<div>',
-        '<strong>' + escapeHTML(analysis.model || "AI model") + '</strong>',
-        '<span>' + escapeHTML(created) + '</span>',
+    this.dom.toggleAnalysisSpread.disabled = analyses.length < 2;
+    this.dom.toggleAnalysisSpread.textContent = this.isAnalysisSpread ? "Stack" : "Spread";
+    const active = this.activeAnalysis();
+    const activeIndex = this.activeAnalysisIndex();
+    if (this.isAnalysisSpread && analyses.length > 1) {
+      this.dom.analysisList.innerHTML = [
+        '<div class="analysis-spread-list">',
+        analyses.map((analysis, index) => this.renderAnalysisSpreadCard(analysis, index, analysis.id === active.id)).join(""),
         '</div>',
-        '<span class="analysis-read-button" data-open-analysis="' + escapeHTML(analysis.id) + '">Zoom out</span>',
-        '</div>',
-        '<p class="analysis-preview">' + escapeHTML(preview) + '</p>',
-        '</article>',
       ].join("");
-    }).join("");
+      return;
+    }
+
+    this.dom.analysisList.innerHTML = [
+      '<div class="analysis-stack-shell">',
+      '<div class="analysis-stack-layer analysis-layer-two" aria-hidden="true"></div>',
+      '<div class="analysis-stack-layer analysis-layer-one" aria-hidden="true"></div>',
+      '<article class="analysis-card analysis-stack-card" data-open-analysis="' + escapeHTML(active.id) + '">',
+      '<span class="analysis-number-badge">' + String(activeIndex + 1) + '</span>',
+      '<div class="analysis-card-header">',
+      '<div>',
+      '<strong>' + escapeHTML(active.model || "AI model") + '</strong>',
+      '<span>' + escapeHTML(active.createdAt ? new Date(active.createdAt).toLocaleString() : "Saved analysis") + '</span>',
+      '</div>',
+      '<div class="analysis-card-controls">',
+      '<button class="mini-icon-button" type="button" data-analysis-prev aria-label="Previous saved analysis">&lt;</button>',
+      '<span class="loop-card-meta">' + String(activeIndex + 1) + ' / ' + String(analyses.length) + '</span>',
+      '<button class="mini-icon-button" type="button" data-analysis-next aria-label="Next saved analysis">&gt;</button>',
+      '<button class="text-button analysis-read-button" type="button" data-open-analysis="' + escapeHTML(active.id) + '">Zoom out</button>',
+      '</div>',
+      '</div>',
+      '<div class="analysis-preview-rich">' + markdownToHtml(this.analysisPreview(active)) + '</div>',
+      '</article>',
+      '</div>',
+    ].join("");
+  }
+
+  renderAnalysisSpreadCard(analysis, index, active) {
+    return [
+      '<button class="analysis-spread-card' + (active ? " active" : "") + '" type="button" data-select-analysis="' + escapeHTML(analysis.id) + '">',
+      '<span class="analysis-number-badge">' + String(index + 1) + '</span>',
+      '<strong>' + escapeHTML(analysis.model || "AI model") + '</strong>',
+      '<span>' + escapeHTML(analysis.createdAt ? new Date(analysis.createdAt).toLocaleString() : "Saved analysis") + '</span>',
+      '<p>' + escapeHTML(this.analysisPreview(analysis)) + '</p>',
+      '</button>',
+    ].join("");
   }
 
   renderMemoryPanel() {
+    this.dom.memoryCardsView.classList.toggle("active", this.memoryView === "cards");
+    this.dom.memoryGraphView.classList.toggle("active", this.memoryView === "graph");
+    this.dom.memoryScopeSelect.value = this.graphScope;
+    this.dom.memoryTypeFilter.value = this.graphType;
+    const memoryBank = this.dom.memoryList.closest(".memory-bank");
+    if (memoryBank) memoryBank.hidden = this.memoryView !== "cards";
+    this.dom.memoryGraphPanel.hidden = this.memoryView !== "graph";
     this.renderMemoryCandidates();
     this.renderAcceptedMemory();
+    if (this.memoryView === "graph") this.renderMemoryGraph();
+  }
+
+  setMemoryView(view) {
+    this.memoryView = view === "graph" ? "graph" : "cards";
+    this.renderMemoryPanel();
   }
 
   renderMemoryCandidates() {
@@ -823,25 +945,214 @@ export class MissionTrackerController {
     }).join("");
   }
 
+  renderMemoryGraph() {
+    const items = this.state.memory?.items || [];
+    const edges = this.state.memory?.edges || [];
+    const graph = buildMemoryGraph({
+      items,
+      edges,
+      scope: this.graphScope,
+      date: this.selectedDate,
+      type: this.graphType,
+    });
+    const nodes = graph.nodes.map((node) => {
+      const saved = this.memoryNodePositions.get(node.id);
+      return saved ? { ...node, ...saved } : node;
+    });
+    const nodeById = new Map(nodes.map((node) => [node.id, node]));
+    const visibleEdges = graph.edges.filter((edge) => nodeById.has(edge.from) && nodeById.has(edge.to));
+    const selected = nodes.find((node) => node.id === this.selectedMemoryId) || nodes[0] || null;
+    if (selected && this.selectedMemoryId !== selected.id) this.selectedMemoryId = selected.id;
+
+    this.dom.memoryGraphSvg.setAttribute("viewBox", [
+      this.graphViewBox.x,
+      this.graphViewBox.y,
+      this.graphViewBox.width,
+      this.graphViewBox.height,
+    ].join(" "));
+
+    if (!nodes.length) {
+      this.dom.memoryGraphSvg.innerHTML = '<text class="memory-graph-empty" x="420" y="260" text-anchor="middle">No memory nodes in this view.</text>';
+      this.dom.memoryDetailPanel.innerHTML = '<p class="eyebrow">Node Detail</p><p class="muted-copy">No accepted memory matches this scope.</p>';
+      return;
+    }
+
+    const neighborIds = new Set();
+    for (const edge of visibleEdges) {
+      if (edge.from === this.selectedMemoryId) neighborIds.add(edge.to);
+      if (edge.to === this.selectedMemoryId) neighborIds.add(edge.from);
+    }
+
+    const lines = visibleEdges.map((edge) => {
+      const from = nodeById.get(edge.from);
+      const to = nodeById.get(edge.to);
+      const active = edge.from === this.selectedMemoryId || edge.to === this.selectedMemoryId ? " active" : "";
+      return [
+        '<line class="memory-edge edge-' + escapeHTML(edge.type) + active + '"',
+        ' x1="' + from.x + '" y1="' + from.y + '" x2="' + to.x + '" y2="' + to.y + '"',
+        ' stroke-width="' + (1.2 + edge.weight * 2.4).toFixed(1) + '"></line>',
+      ].join("");
+    }).join("");
+
+    const nodeMarkup = nodes.map((node) => {
+      const active = node.id === this.selectedMemoryId ? " active" : neighborIds.has(node.id) ? " related" : "";
+      const label = clippedText(node.title, memoryTypeLabel(node.type)).slice(0, 26);
+      return [
+        '<g class="memory-node node-' + escapeHTML(node.type) + active + '" data-memory-node="' + escapeHTML(node.id) + '" transform="translate(' + node.x + ' ' + node.y + ')">',
+        '<circle r="30"></circle>',
+        '<text text-anchor="middle" y="5">' + escapeHTML(label) + '</text>',
+        '<title>' + escapeHTML(memoryTypeLabel(node.type) + ": " + clippedText(node.title)) + '</title>',
+        '</g>',
+      ].join("");
+    }).join("");
+
+    this.dom.memoryGraphSvg.innerHTML = [
+      '<defs>',
+      '<filter id="memoryGlow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>',
+      '</defs>',
+      '<g class="memory-edge-layer">' + lines + '</g>',
+      '<g class="memory-node-layer">' + nodeMarkup + '</g>',
+    ].join("");
+    this.renderMemoryDetail(selected, visibleEdges);
+  }
+
+  renderMemoryDetail(node, edges) {
+    if (!node) return;
+    const relatedCount = edges.filter((edge) => edge.from === node.id || edge.to === node.id).length;
+    this.dom.memoryDetailPanel.innerHTML = [
+      '<p class="eyebrow">' + escapeHTML(memoryTypeLabel(node.type)) + '</p>',
+      '<h3>' + escapeHTML(clippedText(node.title, "Untitled memory")) + '</h3>',
+      '<p>' + escapeHTML(clippedText(node.body)) + '</p>',
+      '<dl class="memory-detail-meta">',
+      '<div><dt>Source</dt><dd>' + escapeHTML(node.source?.date || "Local") + '</dd></div>',
+      '<div><dt>Relations</dt><dd>' + String(relatedCount) + '</dd></div>',
+      '<div><dt>Confidence</dt><dd>' + String(Math.round((Number(node.confidence) || 0.5) * 100)) + '%</dd></div>',
+      '</dl>',
+    ].join("");
+  }
+
+  selectMemoryNode(id) {
+    this.selectedMemoryId = id;
+    this.renderMemoryGraph();
+  }
+
+  graphPoint(event) {
+    const rect = this.dom.memoryGraphSvg.getBoundingClientRect();
+    return {
+      x: this.graphViewBox.x + ((event.clientX - rect.left) / rect.width) * this.graphViewBox.width,
+      y: this.graphViewBox.y + ((event.clientY - rect.top) / rect.height) * this.graphViewBox.height,
+    };
+  }
+
+  handleGraphPointerDown(event) {
+    const node = event.target.closest("[data-memory-node]");
+    if (node) {
+      this.draggedMemoryId = node.dataset.memoryNode;
+      this.selectedMemoryId = this.draggedMemoryId;
+      this.dom.memoryGraphSvg.setPointerCapture?.(event.pointerId);
+      this.renderMemoryGraph();
+      event.preventDefault();
+      return;
+    }
+    this.graphPanStart = {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      viewBox: { ...this.graphViewBox },
+    };
+  }
+
+  handleGraphPointerMove(event) {
+    if (this.draggedMemoryId) {
+      const point = this.graphPoint(event);
+      this.memoryNodePositions.set(this.draggedMemoryId, { x: Math.round(point.x), y: Math.round(point.y) });
+      this.renderMemoryGraph();
+      return;
+    }
+    if (this.graphPanStart) {
+      const rect = this.dom.memoryGraphSvg.getBoundingClientRect();
+      const dx = ((event.clientX - this.graphPanStart.clientX) / rect.width) * this.graphPanStart.viewBox.width;
+      const dy = ((event.clientY - this.graphPanStart.clientY) / rect.height) * this.graphPanStart.viewBox.height;
+      this.graphViewBox = {
+        ...this.graphPanStart.viewBox,
+        x: this.graphPanStart.viewBox.x - dx,
+        y: this.graphPanStart.viewBox.y - dy,
+      };
+      this.renderMemoryGraph();
+    }
+  }
+
+  stopGraphDrag() {
+    this.draggedMemoryId = "";
+    this.graphPanStart = null;
+  }
+
+  zoomGraph(event) {
+    event.preventDefault();
+    const factor = event.deltaY > 0 ? 1.08 : 0.92;
+    const point = this.graphPoint(event);
+    const nextWidth = Math.min(1400, Math.max(420, this.graphViewBox.width * factor));
+    const nextHeight = Math.min(900, Math.max(260, this.graphViewBox.height * factor));
+    const rx = (point.x - this.graphViewBox.x) / this.graphViewBox.width;
+    const ry = (point.y - this.graphViewBox.y) / this.graphViewBox.height;
+    this.graphViewBox = {
+      x: point.x - rx * nextWidth,
+      y: point.y - ry * nextHeight,
+      width: nextWidth,
+      height: nextHeight,
+    };
+    this.renderMemoryGraph();
+  }
+
   openAnalysisReader(id) {
-    const analyses = this.currentEntry().aiAnalyses || [];
+    const analyses = this.currentAnalyses();
     const analysis = analyses.find((item) => item.id === id);
     if (!analysis) return;
     const created = analysis.createdAt ? new Date(analysis.createdAt).toLocaleString() : "Saved analysis";
     const model = analysis.model || "AI model";
+    const index = analyses.findIndex((item) => item.id === id);
 
     this.previousFocus = document.activeElement;
+    this.readerAnalysisId = id;
     this.dom.analysisModalTitle.textContent = model;
-    this.dom.analysisModalMeta.textContent = created;
+    this.dom.analysisModalMeta.textContent = "Analysis " + String(index + 1) + " of " + String(analyses.length) + " / " + created;
     this.dom.analysisModalBody.innerHTML = markdownToHtml(analysis.analysisText || "No analysis text saved.");
+    this.dom.previousAnalysisReader.disabled = analyses.length < 2;
+    this.dom.nextAnalysisReader.disabled = analyses.length < 2;
+    this.renderAnalysisReaderNav();
     this.dom.analysisModal.hidden = false;
     document.body.classList.add("modal-open");
     this.dom.analysisModal.querySelector("[data-close-analysis]")?.focus();
   }
 
+  shiftAnalysisReader(delta) {
+    const analyses = this.currentAnalyses();
+    if (analyses.length < 2) return;
+    const currentIndex = Math.max(0, analyses.findIndex((analysis) => analysis.id === this.readerAnalysisId));
+    const nextIndex = (currentIndex + delta + analyses.length) % analyses.length;
+    this.openAnalysisReader(analyses[nextIndex].id);
+  }
+
+  renderAnalysisReaderNav() {
+    const analyses = this.currentAnalyses();
+    if (analyses.length < 2) {
+      this.dom.analysisReaderNav.innerHTML = "";
+      return;
+    }
+    this.dom.analysisReaderNav.innerHTML = analyses.map((analysis, index) => {
+      const active = analysis.id === this.readerAnalysisId ? " active" : "";
+      return [
+        '<button class="analysis-reader-chip' + active + '" type="button" data-reader-analysis="' + escapeHTML(analysis.id) + '">',
+        '<span>' + String(index + 1) + '</span>',
+        '<strong>' + escapeHTML(analysis.model || "AI") + '</strong>',
+        '</button>',
+      ].join("");
+    }).join("");
+  }
+
   closeAnalysisReader() {
     this.dom.analysisModal.hidden = true;
     document.body.classList.remove("modal-open");
+    this.readerAnalysisId = "";
     if (this.previousFocus && typeof this.previousFocus.focus === "function") {
       this.previousFocus.focus();
     }
