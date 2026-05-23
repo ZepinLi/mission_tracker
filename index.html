@@ -21,7 +21,31 @@
 
         <div class="top-actions" aria-label="Daily navigation">
           <button class="icon-button" id="previousDay" type="button" aria-label="Previous day">&lt;</button>
-          <input id="datePicker" class="date-input" type="date" aria-label="Selected date">
+          <div class="date-control">
+            <input id="datePicker" class="date-input" type="text" readonly aria-label="Selected date" aria-haspopup="dialog" aria-expanded="false">
+            <div class="calendar-popover" id="calendarPopover" hidden>
+              <div class="calendar-head">
+                <button class="mini-icon-button" id="previousCalendarMonth" type="button" aria-label="Previous month">&lt;</button>
+                <strong id="calendarMonthLabel">Month</strong>
+                <button class="mini-icon-button" id="nextCalendarMonth" type="button" aria-label="Next month">&gt;</button>
+              </div>
+              <div class="calendar-weekdays" aria-hidden="true">
+                <span>Sun</span>
+                <span>Mon</span>
+                <span>Tue</span>
+                <span>Wed</span>
+                <span>Thu</span>
+                <span>Fri</span>
+                <span>Sat</span>
+              </div>
+              <div class="calendar-grid" id="calendarGrid" role="grid" aria-label="History trace calendar"></div>
+              <div class="calendar-legend" aria-label="Calendar status legend">
+                <span><i class="legend-dot success"></i> recorded</span>
+                <span><i class="legend-dot missed"></i> empty</span>
+                <span><i class="legend-dot future"></i> future</span>
+              </div>
+            </div>
+          </div>
           <button class="icon-button" id="nextDay" type="button" aria-label="Next day">&gt;</button>
           <button class="text-button" id="todayButton" type="button">Today</button>
           <span class="save-status" id="saveStatus" role="status" aria-live="polite">Loading...</span>
@@ -29,6 +53,28 @@
       </header>
 
       <main class="journal-shell">
+        <section class="anchors-panel" aria-labelledby="anchorsTitle">
+          <div class="section-title compact-title">
+            <p class="eyebrow">Ambition Anchors</p>
+            <h2 id="anchorsTitle">Today still points somewhere.</h2>
+          </div>
+
+          <div class="anchor-grid">
+            <label class="anchor-card venture">
+              <span>Entrepreneur</span>
+              <textarea id="ventureActionInput" rows="3" placeholder="One reality-facing move."></textarea>
+            </label>
+            <label class="anchor-card research">
+              <span>RL Research</span>
+              <textarea id="researchActionInput" rows="3" placeholder="One compounding research artifact."></textarea>
+            </label>
+            <label class="anchor-card family">
+              <span>Family</span>
+              <textarea id="familyActionInput" rows="3" placeholder="One act of presence or companionship."></textarea>
+            </label>
+          </div>
+        </section>
+
         <section class="journal-panel card-stack-panel" id="journalPanel" aria-labelledby="dailyLoopTitle" data-motion="idle" data-spread="false">
           <div class="card-stack-layer layer-two" aria-hidden="true"></div>
           <div class="card-stack-layer layer-one" aria-hidden="true"></div>
@@ -53,34 +99,46 @@
             <div class="loop-spread-list" id="loopSpreadList" aria-label="Daily loop card overview"></div>
           </div>
 
-          <div class="field-grid">
-            <label class="journal-field large-field">
-              <span>Signal / Mistake</span>
-              <span class="journal-resize-frame">
-                <textarea id="signalInput" rows="5" placeholder="What happened? Name the event without self-blame."></textarea>
-              </span>
-            </label>
+          <div class="field-grid" id="dailyFieldGrid">
+            <div class="journal-field-row" id="topFieldRow" data-field-split-row="top">
+              <label class="journal-field large-field">
+                <span>Signal / Mistake</span>
+                <span class="journal-resize-frame">
+                  <textarea id="signalInput" rows="5" placeholder="What happened? Name the event without self-blame."></textarea>
+                </span>
+              </label>
 
-            <label class="journal-field large-field">
-              <span>Root Condition</span>
-              <span class="journal-resize-frame">
-                <textarea id="rootConditionInput" rows="5" placeholder="What conditions made this likely to happen again?"></textarea>
-              </span>
-            </label>
+              <button class="journal-split-handle" id="topSplitHandle" type="button" aria-label="Resize Signal and Root Condition fields">
+                <span aria-hidden="true"></span>
+              </button>
 
-            <label class="journal-field">
-              <span>Principle</span>
-              <span class="journal-resize-frame">
-                <textarea id="principleInput" rows="4" placeholder="What reusable rule should guide the next similar situation?"></textarea>
-              </span>
-            </label>
+              <label class="journal-field large-field">
+                <span>Root Condition</span>
+                <span class="journal-resize-frame">
+                  <textarea id="rootConditionInput" rows="5" placeholder="What conditions made this likely to happen again?"></textarea>
+                </span>
+              </label>
+            </div>
 
-            <label class="journal-field">
-              <span>Mechanism / Next Move</span>
-              <span class="journal-resize-frame">
-                <textarea id="mechanismInput" rows="4" placeholder="What system, default, or concrete next action prevents a repeat?"></textarea>
-              </span>
-            </label>
+            <div class="journal-field-row" id="bottomFieldRow" data-field-split-row="bottom">
+              <label class="journal-field">
+                <span>Principle</span>
+                <span class="journal-resize-frame">
+                  <textarea id="principleInput" rows="4" placeholder="What reusable rule should guide the next similar situation?"></textarea>
+                </span>
+              </label>
+
+              <button class="journal-split-handle" id="bottomSplitHandle" type="button" aria-label="Resize Principle and Mechanism fields">
+                <span aria-hidden="true"></span>
+              </button>
+
+              <label class="journal-field">
+                <span>Mechanism / Next Move</span>
+                <span class="journal-resize-frame">
+                  <textarea id="mechanismInput" rows="4" placeholder="What system, default, or concrete next action prevents a repeat?"></textarea>
+                </span>
+              </label>
+            </div>
           </div>
         </section>
 
@@ -93,19 +151,23 @@
             <div class="ai-config-fields">
               <label class="model-field">
                 <span>Model</span>
-                <input id="aiModelInput" list="aiModelOptions" autocomplete="off" value="gpt-5.2">
+                <input id="aiModelInput" list="aiModelOptions" autocomplete="off" value="gpt-5.5">
                 <datalist id="aiModelOptions">
                   <option value="gpt-5.5"></option>
                   <option value="gpt-5.2"></option>
+                  <option value="gpt-5.2-pro"></option>
                   <option value="gpt-5.1"></option>
+                  <option value="gpt-4o"></option>
                 </datalist>
               </label>
               <label class="model-field effort-field">
                 <span>Reasoning</span>
                 <select id="aiEffortSelect">
+                  <option value="none">None</option>
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
                   <option value="high" selected>High</option>
+                  <option value="xhigh">XHigh</option>
                 </select>
               </label>
             </div>
@@ -115,6 +177,11 @@
             <button class="text-button ai-primary-button" id="analyzeButton" type="button">Analyze with AI</button>
             <button class="text-button" id="saveAnalysisButton" type="button">Save Analysis</button>
             <span class="ai-status" id="aiStatus" role="status" aria-live="polite">AI ready</span>
+          </div>
+
+          <div class="related-memory-panel" aria-label="Memory sent into AI analysis">
+            <p class="eyebrow">Related Memory</p>
+            <div class="related-memory-list" id="relatedMemoryList"></div>
           </div>
 
           <label class="ai-draft-field">
@@ -161,6 +228,7 @@
                 <option value="experiment">Experiment</option>
                 <option value="identity_signal">Identity Signal</option>
               </select>
+              <button class="text-button memory-spread-button" id="toggleMemorySpread" type="button">Spread</button>
               <button class="text-button" id="extractMemoryButton" type="button">Extract Memory</button>
               <span class="memory-status" id="memoryStatus" role="status" aria-live="polite">Memory local</span>
             </div>
@@ -177,6 +245,27 @@
           </div>
 
           <div class="memory-graph-panel" id="memoryGraphPanel" hidden>
+            <div class="memory-graph-controls" aria-label="Memory graph controls">
+              <select class="memory-filter compact" id="memoryRelationFilter" aria-label="Memory relation filter">
+                <option value="all">All Relations</option>
+                <option value="causes">Causes</option>
+                <option value="prevents">Prevents</option>
+                <option value="reinforces">Reinforces</option>
+                <option value="evolves_from">Evolves From</option>
+                <option value="same_context">Same Context</option>
+                <option value="supports_goal">Supports Goal</option>
+                <option value="triggered_by">Triggered By</option>
+                <option value="caused_by">Caused By</option>
+                <option value="prevented_by">Prevented By</option>
+                <option value="replaces_old_mechanism">Replaces Old Mechanism</option>
+                <option value="failed_under_condition">Failed Under Condition</option>
+                <option value="contradicts">Contradicts</option>
+                <option value="needs_experiment">Needs Experiment</option>
+              </select>
+              <button class="text-button" id="fitMemoryGraph" type="button">Fit</button>
+              <button class="text-button" id="resetMemoryGraph" type="button">Reset</button>
+              <button class="text-button" id="toggleMemoryGraphFullscreen" type="button">Full screen</button>
+            </div>
             <div class="memory-graph-shell">
               <svg id="memoryGraphSvg" class="memory-graph-svg" viewBox="0 0 840 520" role="img" aria-label="Memory knowledge graph"></svg>
               <aside class="memory-detail-panel" id="memoryDetailPanel">
@@ -185,29 +274,28 @@
               </aside>
             </div>
           </div>
-        </section>
 
-        <section class="anchors-panel" aria-labelledby="anchorsTitle">
-          <div class="section-title compact-title">
-            <p class="eyebrow">Ambition Anchors</p>
-            <h2 id="anchorsTitle">Today still points somewhere.</h2>
-          </div>
-
-          <div class="anchor-grid">
-            <label class="anchor-card venture">
-              <span>Entrepreneur</span>
-              <textarea id="ventureActionInput" rows="3" placeholder="One reality-facing move."></textarea>
-            </label>
-            <label class="anchor-card research">
-              <span>RL Research</span>
-              <textarea id="researchActionInput" rows="3" placeholder="One compounding research artifact."></textarea>
-            </label>
-            <label class="anchor-card family">
-              <span>Family</span>
-              <textarea id="familyActionInput" rows="3" placeholder="One act of presence or companionship."></textarea>
-            </label>
+          <div class="memory-settings-dock">
+            <button class="text-button memory-settings-toggle" id="toggleMemorySettings" type="button" aria-expanded="false">Model Settings</button>
+            <div class="memory-settings-panel" id="memorySettingsPanel" hidden>
+              <label class="memory-model-field">
+                <span>Memory Model</span>
+                <input id="memoryModelInput" list="aiModelOptions" autocomplete="off" value="gpt-5.5">
+              </label>
+              <label class="memory-model-field compact">
+                <span>Reasoning</span>
+                <select id="memoryEffortSelect">
+                  <option value="none">None</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high" selected>High</option>
+                  <option value="xhigh">XHigh</option>
+                </select>
+              </label>
+            </div>
           </div>
         </section>
+
       </main>
 
       <button class="manual-save-island" id="manualSaveIsland" type="button" aria-label="Save everything now">

@@ -1,6 +1,6 @@
 const { randomId, nowIso } = require("../utils");
 
-const DEFAULT_MODEL = "gpt-5.2";
+const DEFAULT_MODEL = "gpt-5.5";
 const DEFAULT_REASONING_EFFORT = "high";
 const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
 const MEMORY_TYPES = new Set([
@@ -50,7 +50,7 @@ function sanitizeModel(model) {
 
 function sanitizeReasoningEffort(effort) {
   const value = String(effort || DEFAULT_REASONING_EFFORT).trim().toLowerCase();
-  return ["low", "medium", "high"].includes(value) ? value : DEFAULT_REASONING_EFFORT;
+  return ["none", "low", "medium", "high", "xhigh"].includes(value) ? value : DEFAULT_REASONING_EFFORT;
 }
 
 function pickEntrySummary(entry = {}) {
@@ -276,18 +276,27 @@ function parseMemoryCandidates(text, source = {}) {
 
 async function callOpenAI({ model, reasoningEffort, input }) {
   const apiKey = requireApiKey();
-  const response = await fetch(configuredBaseUrl() + "/responses", {
-    method: "POST",
-    headers: {
-      Authorization: "Bearer " + apiKey,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: sanitizeModel(model),
-      input,
-      reasoning: { effort: sanitizeReasoningEffort(reasoningEffort) },
-    }),
-  });
+  let response;
+  try {
+    response = await fetch(configuredBaseUrl() + "/responses", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: sanitizeModel(model),
+        input,
+        reasoning: { effort: sanitizeReasoningEffort(reasoningEffort) },
+      }),
+    });
+  } catch (networkError) {
+    const reason = networkError.cause?.code || networkError.cause?.message || networkError.message || "fetch failed";
+    const error = new Error("AI network request failed: " + reason);
+    error.status = 502;
+    error.code = "ai_network_request_failed";
+    throw error;
+  }
   const text = await response.text();
   const { payload, outputText } = parseOpenAiResponseText(text);
   if (!response.ok) {

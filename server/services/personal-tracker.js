@@ -18,6 +18,13 @@ const MEMORY_TYPES = [
   "identity_signal",
 ];
 const MEMORY_EDGE_TYPES = [
+  "triggered_by",
+  "caused_by",
+  "prevented_by",
+  "replaces_old_mechanism",
+  "failed_under_condition",
+  "contradicts",
+  "needs_experiment",
   "causes",
   "prevents",
   "reinforces",

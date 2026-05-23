@@ -1,4 +1,11 @@
 export const MEMORY_EDGE_TYPES = [
+  "triggered_by",
+  "caused_by",
+  "prevented_by",
+  "replaces_old_mechanism",
+  "failed_under_condition",
+  "contradicts",
+  "needs_experiment",
   "causes",
   "prevents",
   "reinforces",
@@ -104,10 +111,15 @@ function edge(from, to, type, weight) {
 }
 
 function relationForTypes(left, right) {
-  if (left === "root_condition" && right === "mechanism") return "prevents";
+  if (left === "root_condition" && right === "recurring_pattern") return "caused_by";
+  if (right === "root_condition" && left === "recurring_pattern") return "triggered_by";
+  if (left === "root_condition" && right === "mechanism") return "prevented_by";
+  if (right === "root_condition" && left === "mechanism") return "prevented_by";
+  if (left === "mechanism" && right === "mechanism") return "replaces_old_mechanism";
+  if (left === "open_loop" || right === "open_loop") return "needs_experiment";
+  if (left === "experiment" || right === "experiment") return "needs_experiment";
   if (left === "principle" || right === "principle") return "reinforces";
-  if (left === "experiment" || right === "experiment") return "supports_goal";
-  if (left === "recurring_pattern" || right === "recurring_pattern") return "causes";
+  if (left === "recurring_pattern" || right === "recurring_pattern") return "triggered_by";
   return "same_context";
 }
 

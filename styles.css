@@ -30,6 +30,10 @@ body {
   min-height: 100vh;
 }
 
+body.graph-fullscreen-open {
+  overflow: hidden;
+}
+
 button,
 input,
 textarea { font: inherit; }
@@ -122,6 +126,8 @@ button { cursor: pointer; }
 .date-input {
   font-weight: 800;
   padding: 0 14px;
+  text-align: center;
+  width: 176px;
 }
 
 .icon-button:hover,
@@ -134,6 +140,161 @@ button { cursor: pointer; }
 textarea:focus-visible {
   outline: 3px solid rgba(47, 95, 152, 0.24);
   outline-offset: 2px;
+}
+
+.date-control {
+  position: relative;
+}
+
+.calendar-popover {
+  background: rgba(255, 253, 248, 0.96);
+  border: 1px solid rgba(222, 216, 204, 0.96);
+  border-radius: 18px;
+  box-shadow: 0 28px 70px rgba(29, 27, 24, 0.14);
+  padding: 14px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 12px);
+  width: 336px;
+  z-index: 80;
+}
+
+.calendar-popover[hidden] {
+  display: none;
+}
+
+.calendar-head {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.calendar-head strong {
+  color: #183453;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.calendar-weekdays,
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.calendar-weekdays {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  margin-bottom: 5px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.calendar-grid {
+  gap: 5px;
+}
+
+.calendar-day {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  display: inline-flex;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0;
+}
+
+.calendar-day-number {
+  align-items: center;
+  background: rgba(245, 241, 233, 0.72);
+  border: 1px solid rgba(222, 216, 204, 0.8);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 900;
+  height: 32px;
+  justify-content: center;
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+  width: 32px;
+}
+
+.calendar-day.recorded .calendar-day-number {
+  background: var(--success-bg);
+  border-color: #8fbfaf;
+  color: var(--success);
+}
+
+.calendar-day.missed .calendar-day-number {
+  background: var(--error-bg);
+  border-color: #d89b94;
+  color: var(--error);
+}
+
+.calendar-day.future .calendar-day-number {
+  background: rgba(255, 253, 248, 0.82);
+  border-color: rgba(222, 216, 204, 0.72);
+  color: #9ba0a7;
+}
+
+.calendar-day.outside-month {
+  opacity: 0.52;
+}
+
+.calendar-day.today .calendar-day-number {
+  border-width: 2px;
+}
+
+.calendar-day.selected .calendar-day-number {
+  background: #183453;
+  border-color: #183453;
+  box-shadow: 0 10px 24px rgba(24, 52, 83, 0.2);
+  color: #fffdf8;
+  transform: translateY(-1px);
+}
+
+.calendar-day:hover .calendar-day-number,
+.calendar-day:focus-visible .calendar-day-number {
+  border-color: var(--focus);
+  box-shadow: 0 8px 20px rgba(47, 95, 152, 0.16);
+}
+
+.calendar-day:focus-visible {
+  outline: none;
+}
+
+.calendar-legend {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 11px;
+  font-weight: 800;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.calendar-legend span {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+}
+
+.legend-dot {
+  border-radius: 999px;
+  display: inline-block;
+  height: 9px;
+  width: 9px;
+}
+
+.legend-dot.success { background: var(--success); }
+.legend-dot.missed { background: var(--error); }
+.legend-dot.future {
+  background: #d7d1c7;
+  border: 1px solid #bfb7aa;
 }
 
 .save-status {
@@ -445,7 +606,58 @@ textarea:focus-visible {
 .field-grid {
   display: grid;
   gap: 18px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+  overflow: hidden;
+}
+
+.journal-field-row {
+  --left-column: 1fr;
+  --right-column: 1fr;
+  align-items: start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, var(--left-column)) 16px minmax(0, var(--right-column));
+  min-width: 0;
+  overflow: hidden;
+}
+
+.journal-split-handle {
+  align-self: stretch;
+  background: transparent;
+  border: 0;
+  cursor: col-resize;
+  display: grid;
+  justify-items: center;
+  margin-top: 30px;
+  min-height: 150px;
+  padding: 0;
+  touch-action: none;
+  width: 16px;
+}
+
+.large-field + .journal-split-handle {
+  min-height: 190px;
+}
+
+.journal-split-handle span {
+  background: rgba(24, 52, 83, 0.14);
+  border-radius: 999px;
+  display: block;
+  height: 100%;
+  transition: background 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+  width: 3px;
+}
+
+.journal-split-handle:hover span,
+.journal-split-handle:focus-visible span,
+.journal-field-row.is-resizing .journal-split-handle span {
+  background: rgba(24, 52, 83, 0.32);
+  box-shadow: 0 0 0 5px rgba(47, 95, 152, 0.08);
+  transform: scaleX(1.35);
+}
+
+.journal-split-handle:focus-visible {
+  outline: none;
 }
 
 .journal-field,
@@ -453,6 +665,7 @@ textarea:focus-visible {
   display: grid;
   gap: 10px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .journal-field {
@@ -476,9 +689,9 @@ textarea:focus-visible {
   height: 150px;
   max-width: 100%;
   min-height: 150px;
-  min-width: min(260px, 100%);
+  min-width: 0;
   overflow: hidden;
-  resize: both;
+  resize: vertical;
   text-transform: none;
   width: 100%;
 }
@@ -556,6 +769,14 @@ textarea:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .journal-field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .journal-split-handle {
+    display: none;
+  }
+
   .journal-panel,
   .anchors-panel,
   .memory-panel {
@@ -599,7 +820,12 @@ textarea:focus-visible {
   .brand-title { font-size: 36px; }
   .principle-mark { font-size: 82px; }
   .top-actions { align-items: stretch; }
-  .date-input { flex: 1 1 170px; }
+  .date-control { flex: 1 1 170px; }
+  .date-input { width: 100%; }
+  .calendar-popover {
+    right: auto;
+    width: min(92vw, 336px);
+  }
   .save-status { flex: 1 1 100%; justify-content: center; }
   .loop-card-meta { order: 4; width: 100%; text-align: center; }
   .add-card-button,
@@ -645,6 +871,8 @@ textarea:focus-visible {
 
 .model-field input,
 .model-field select,
+.memory-model-field input,
+.memory-model-field select,
 .chat-row textarea,
 .ai-draft-field textarea {
   background: var(--panel-soft);
@@ -653,6 +881,76 @@ textarea:focus-visible {
   color: var(--ink);
   min-height: 42px;
   padding: 10px 12px;
+}
+
+.related-memory-panel {
+  background: rgba(245, 241, 233, 0.42);
+  border: 1px solid rgba(210, 199, 181, 0.72);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 12px;
+}
+
+.related-memory-list {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.related-memory-card {
+  background: rgba(255, 253, 248, 0.86);
+  border: 1px solid var(--line);
+  border-left: 4px solid #2f5f98;
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  text-align: left;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  width: 100%;
+}
+
+.related-memory-card:hover,
+.related-memory-card:focus-visible {
+  border-color: rgba(47, 95, 152, 0.4);
+  box-shadow: 0 12px 24px rgba(29, 27, 24, 0.08);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.related-memory-card div {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.related-memory-card strong {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.related-memory-card p {
+  color: var(--muted);
+  display: -webkit-box;
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.related-memory-score {
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 
 .ai-actions {
@@ -806,7 +1104,7 @@ textarea:focus-visible {
   justify-content: flex-end;
 }
 
-.analysis-card-header div {
+.analysis-card-header > div:first-child {
   display: grid;
   gap: 3px;
 }
@@ -1151,6 +1449,57 @@ body.modal-open {
   padding: 0 12px;
 }
 
+.memory-model-field {
+  display: grid;
+  gap: 5px;
+  min-width: 154px;
+}
+
+.memory-model-field.compact {
+  min-width: 122px;
+}
+
+.memory-model-field span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.memory-model-field input,
+.memory-model-field select {
+  min-height: 38px;
+}
+
+.memory-settings-dock {
+  align-items: flex-end;
+  display: grid;
+  gap: 10px;
+  justify-items: end;
+  margin-top: 2px;
+}
+
+.memory-settings-toggle {
+  min-height: 34px;
+  padding: 0 14px;
+}
+
+.memory-settings-panel {
+  align-items: end;
+  background: rgba(245, 241, 233, 0.62);
+  border: 1px solid rgba(210, 199, 181, 0.72);
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 12px;
+}
+
+.memory-settings-panel[hidden] {
+  display: none;
+}
+
 .memory-status {
   align-items: center;
   background: var(--success-bg);
@@ -1181,6 +1530,10 @@ body.modal-open {
 .memory-bank {
   display: grid;
   gap: 10px;
+}
+
+.memory-bank[hidden] {
+  display: none;
 }
 
 .memory-candidate-list,
@@ -1259,13 +1612,92 @@ body.modal-open {
 }
 
 .memory-list {
+  grid-template-columns: 1fr;
+}
+
+.memory-stack-shell {
+  isolation: isolate;
+  min-height: 250px;
+  position: relative;
+}
+
+.memory-stack-layer {
+  background: rgba(255, 253, 248, 0.72);
+  border: 1px solid rgba(210, 199, 181, 0.72);
+  border-radius: 8px;
+  inset: 0;
+  position: absolute;
+  z-index: 0;
+}
+
+.memory-layer-one { transform: translate(8px, 8px) rotate(0.25deg); }
+.memory-layer-two { opacity: 0.72; transform: translate(16px, 16px) rotate(0.5deg); }
+
+.memory-stack-card {
+  min-height: 230px;
+  position: relative;
+  z-index: 2;
+}
+
+.memory-spread-list {
+  display: grid;
+  gap: 12px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.memory-spread-card {
+  color: inherit;
+  cursor: pointer;
+  min-height: 190px;
+  position: relative;
+  text-align: left;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.memory-spread-card.active,
+.memory-spread-card:hover,
+.memory-spread-card:focus-visible,
+.memory-stack-card:hover {
+  border-color: rgba(47, 95, 152, 0.38);
+  box-shadow: 0 14px 30px rgba(29, 27, 24, 0.08);
+  outline: none;
+  transform: translateY(-1px);
 }
 
 .memory-card {
   border-left: 4px solid var(--focus);
   display: grid;
   gap: 8px;
+}
+
+.memory-card-controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.memory-card-top > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.memory-number-badge {
+  align-items: center;
+  background: #183453;
+  border-radius: 999px;
+  box-shadow: 0 10px 20px rgba(24, 52, 83, 0.22);
+  color: #fffdf8;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 900;
+  height: 30px;
+  justify-content: center;
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  width: 30px;
 }
 
 .memory-card h3 {
@@ -1276,9 +1708,13 @@ body.modal-open {
 
 .memory-card p {
   color: var(--muted);
+  display: -webkit-box;
   line-height: 1.58;
   margin: 0;
+  overflow: hidden;
   white-space: pre-wrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
 }
 
 .memory-card-top span:last-child {
@@ -1291,10 +1727,29 @@ body.modal-open {
   display: none;
 }
 
+.memory-graph-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.memory-graph-controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  position: relative;
+  z-index: 30;
+}
+
+.memory-filter.compact {
+  min-width: 176px;
+}
+
 .memory-graph-shell {
   background:
-    radial-gradient(circle at 20% 10%, rgba(47, 95, 152, 0.09), transparent 18rem),
-    radial-gradient(circle at 85% 72%, rgba(183, 110, 30, 0.1), transparent 16rem),
+    radial-gradient(circle at 18% 8%, rgba(47, 95, 152, 0.08), transparent 18rem),
+    radial-gradient(circle at 85% 76%, rgba(183, 110, 30, 0.08), transparent 16rem),
     #fffdf8;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -1306,8 +1761,31 @@ body.modal-open {
   padding: 14px;
 }
 
+.memory-graph-panel.fullscreen {
+  background:
+    radial-gradient(circle at 16% 12%, rgba(47, 95, 152, 0.08), transparent 22rem),
+    rgba(246, 244, 239, 0.96);
+  inset: 16px;
+  padding: 18px;
+  position: fixed;
+  z-index: 50;
+}
+
+.memory-graph-panel.fullscreen .memory-graph-shell {
+  grid-template-columns: minmax(0, 1fr) 320px;
+  min-height: calc(100vh - 112px);
+}
+
+.memory-graph-panel.fullscreen .memory-graph-svg {
+  height: calc(100vh - 146px);
+}
+
 .memory-graph-svg {
-  background: rgba(255, 253, 248, 0.42);
+  background:
+    linear-gradient(rgba(47, 95, 152, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(47, 95, 152, 0.035) 1px, transparent 1px),
+    rgba(255, 253, 248, 0.7);
+  background-size: 42px 42px;
   border: 1px solid rgba(222, 216, 204, 0.72);
   border-radius: 10px;
   cursor: grab;
@@ -1322,11 +1800,45 @@ body.modal-open {
 
 .memory-edge {
   stroke: rgba(47, 95, 152, 0.24);
+  fill: none;
   stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: opacity 160ms ease, stroke 160ms ease, stroke-width 160ms ease;
 }
 
 .memory-edge.active {
-  stroke: rgba(183, 110, 30, 0.66);
+  stroke: rgba(183, 110, 30, 0.76);
+  stroke-width: 3.2;
+}
+
+.memory-edge.selected {
+  stroke: rgba(24, 52, 83, 0.7);
+}
+
+#memoryArrow path {
+  fill: rgba(47, 95, 152, 0.34);
+}
+
+.memory-edge.active + .memory-edge-label {
+  opacity: 1;
+}
+
+.memory-edge-label {
+  fill: rgba(100, 107, 118, 0.86);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0;
+  opacity: 0.86;
+  pointer-events: none;
+  text-anchor: middle;
+  text-transform: uppercase;
+}
+
+.memory-graph-grid path {
+  fill: none;
+  stroke: rgba(183, 110, 30, 0.1);
+  stroke-dasharray: 7 11;
+  stroke-width: 1.2;
 }
 
 .memory-node {
@@ -1334,42 +1846,82 @@ body.modal-open {
   filter: url(#memoryGlow);
 }
 
-.memory-node circle {
+.memory-node-card {
   fill: #fffdf8;
-  stroke: #183453;
-  stroke-width: 2;
-  transition: fill 160ms ease, stroke-width 160ms ease, transform 160ms ease;
+  stroke: rgba(24, 52, 83, 0.22);
+  stroke-width: 1.2;
+  transition: fill 160ms ease, stroke 160ms ease, transform 160ms ease;
+}
+
+.memory-node-accent {
+  fill: var(--focus);
 }
 
 .memory-node text {
   fill: #183453;
-  font-size: 10px;
-  font-weight: 900;
   pointer-events: none;
 }
 
-.memory-node.active circle {
-  fill: #183453;
-  stroke: #fffdf8;
-  stroke-width: 3;
+.memory-node-type {
+  fill: var(--muted);
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 
-.memory-node.active text {
+.memory-node-title {
+  fill: var(--ink);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.memory-node-body {
+  fill: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.memory-node.active .memory-node-card {
+  fill: #183453;
+  stroke: rgba(255, 253, 248, 0.88);
+  stroke-width: 2.4;
+}
+
+.memory-node.active .memory-node-type,
+.memory-node.active .memory-node-title,
+.memory-node.active .memory-node-body {
   fill: #fffdf8;
 }
 
-.memory-node.related circle {
-  stroke: var(--venture);
-  stroke-width: 3;
+.memory-node.hovered .memory-node-card {
+  fill: #f8efe0;
+  stroke: rgba(183, 110, 30, 0.82);
+  stroke-width: 2.3;
 }
 
-.node-mechanism circle,
-.node-experiment circle { stroke: var(--venture); }
-.node-principle circle,
-.node-recurring_pattern circle { stroke: var(--focus); }
-.node-root_condition circle { stroke: #6d7682; }
-.node-identity_signal circle { stroke: var(--family); }
-.node-open_loop circle { stroke: var(--warning); }
+.memory-node.hovered .memory-node-title {
+  fill: #183453;
+}
+
+.memory-node.related .memory-node-card {
+  stroke: var(--venture);
+  stroke-width: 2.1;
+}
+
+.memory-node:hover .memory-node-card,
+.memory-node:focus-visible .memory-node-card {
+  stroke: rgba(183, 110, 30, 0.72);
+  stroke-width: 2;
+  transform: translateY(-3px);
+}
+
+.node-mechanism .memory-node-accent,
+.node-experiment .memory-node-accent { fill: var(--venture); }
+.node-principle .memory-node-accent,
+.node-recurring_pattern .memory-node-accent { fill: var(--focus); }
+.node-root_condition .memory-node-accent { fill: #6d7682; }
+.node-identity_signal .memory-node-accent { fill: var(--family); }
+.node-open_loop .memory-node-accent { fill: var(--warning); }
 
 .memory-graph-empty {
   fill: var(--muted);
@@ -1406,6 +1958,43 @@ body.modal-open {
   margin: 8px 0 0;
 }
 
+.memory-relation-list {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 12px;
+}
+
+.memory-relation-chip {
+  background: rgba(245, 241, 233, 0.76);
+  border: 1px solid rgba(210, 199, 181, 0.82);
+  border-radius: 8px;
+  color: var(--ink);
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.memory-relation-chip:hover,
+.memory-relation-chip:focus-visible {
+  border-color: rgba(47, 95, 152, 0.42);
+  outline: none;
+}
+
+.memory-relation-chip span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.memory-relation-chip strong {
+  font-size: 13px;
+  line-height: 1.25;
+}
+
 .memory-detail-meta div {
   border-top: 1px solid var(--line);
   display: flex;
@@ -1435,16 +2024,44 @@ body.modal-open {
     justify-content: flex-start;
   }
 
-  .memory-list {
+  .memory-graph-controls {
+    justify-content: flex-start;
+  }
+
+  .memory-spread-list {
     grid-template-columns: 1fr;
+  }
+
+  .memory-card-top,
+  .memory-card-controls {
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+
+  .memory-settings-dock {
+    justify-items: stretch;
   }
 
   .memory-graph-shell {
     grid-template-columns: 1fr;
   }
 
+  .memory-graph-panel.fullscreen {
+    inset: 8px;
+    overflow: auto;
+  }
+
+  .memory-graph-panel.fullscreen .memory-graph-shell {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
   .memory-graph-svg {
     height: 420px;
+  }
+
+  .memory-graph-panel.fullscreen .memory-graph-svg {
+    height: 62vh;
   }
 
   .model-field { min-width: 0; }
